@@ -1,0 +1,39 @@
+# Build artifacts
+/build/
+/*.out
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.lo
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug / profiling files
+*.dSYM/
+*.stackdump
+*.core
+*.gmon
+*.gcno
+*.gcda
+*.gcov
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*~
+*.bak
+
+# Logs
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
