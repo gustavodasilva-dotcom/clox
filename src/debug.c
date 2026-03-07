@@ -1,0 +1,64 @@
+#include <stdio.h>
+
+#include "debug.h"
+#include "value.h"
+
+void disassembleChunk(Chunk *chunk, const char *name) {
+  printf("== %s ==\n", name);
+
+  for (int offset = 0; offset < chunk->count;) {
+    // Return offset of the next instruction
+    offset = disassembleInstruction(chunk, offset);
+  }
+}
+
+static int simpleInstruction(const char *name, int offset) {
+  printf("%s\n", name);
+
+  // Return offset of the opcode after the current one
+  return offset + 1;
+}
+
+static int constantInstruction(const char *name, Chunk *chunk, int offset) {
+  // Get the constant index from the byte after the opcode (index of the
+  // constant in the constants array)
+  uint8_t constant = chunk->code[offset + 1];
+
+  printf("%-16s %4d '", name, constant);
+
+  // Print the value of the constant at the index
+  printValue(chunk->constants.values[constant]);
+
+  printf("'\n");
+
+  // Return offset by 2 (opcode + operand)
+  return offset + 2;
+}
+
+int disassembleInstruction(Chunk *chunk, int offset) {
+  printf("%04d ", offset);
+
+  // Print a vertical bar if the current instruction is on the same line as the
+  // previous one, for better readability of instructions from the same line of
+  // source code
+  if (offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1]) {
+    printf("   | ");
+  } else {
+    printf("%4d ", chunk->lines[offset]);
+  }
+
+  // Get single byte at index
+  uint8_t instruction = chunk->code[offset];
+
+  switch (instruction) {
+  case OP_RETURN:
+    return simpleInstruction("OP_RETURN", offset);
+  case OP_CONSTANT:
+    return constantInstruction("OP_CONSTANT", chunk, offset);
+  default:
+    printf("Unknown opcode %d\n", instruction);
+
+    // Return offset of the next instruction
+    return offset + 1;
+  }
+}
