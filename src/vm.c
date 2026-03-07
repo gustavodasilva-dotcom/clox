@@ -6,7 +6,13 @@
 
 VM vm;
 
-void initVM() {}
+static void resetStack() {
+  // Set the stack top to the beginning of the stack (decays to a pointer to the
+  // first element)
+  vm.stackTop = vm.stack;
+}
+
+void initVM() { resetStack(); }
 
 void freeVM() {}
 
@@ -16,6 +22,13 @@ static InterpretResult run() {
 
   for (;;) {
 #ifdef DEBUG_TRACE_INSTRUCTION
+    printf("          ");
+    for (Value *slot = vm.stack; slot < vm.stackTop; slot++) {
+      printf("[ ");
+      printValue(*slot);
+      printf(" ]");
+    }
+    printf("\n");
     disassembleInstruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
 #endif
 
@@ -24,11 +37,15 @@ static InterpretResult run() {
     switch (instruction = READ_BYTE()) {
     case OP_CONSTANT: {
       Value constant = READ_CONSTANT();
-      printValue(constant);
-      printf("\n");
+      push(constant);
       break;
     }
+    case OP_NEGATE:
+      push(-pop());
+      break;
     case OP_RETURN: {
+      printValue(pop());
+      printf("\n");
       return INTERPRET_OK;
     }
     }
@@ -42,4 +59,19 @@ InterpretResult interpret(Chunk *chunk) {
   vm.chunk = chunk;
   vm.ip = vm.chunk->code;
   return run();
+}
+
+void push(Value value) {
+  // Store the value at the current stack top
+  *vm.stackTop = value;
+  // Move the stack top up to the next slot
+  vm.stackTop++;
+}
+
+Value pop() {
+  // Move the stack top down to the most recently used slot
+  vm.stackTop--;
+  // Return value (no need to remove it; moving the stack top down marks it as
+  // "unused")
+  return *vm.stackTop;
 }
