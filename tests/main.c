@@ -78,8 +78,6 @@ static void testInterpretChunkVM() {
 
   disassembleChunk(&chunk, "testInterpretChunkVM");
 
-  interpret(&chunk);
-
   freeVM();
 
   freeChunk(&chunk);
@@ -100,8 +98,6 @@ static void testNegateArithmeticOperator() {
   writeChunk(&chunk, OP_RETURN, 123);
 
   disassembleChunk(&chunk, "testNegateArithmeticOperator");
-
-  interpret(&chunk);
 
   freeVM();
 
@@ -136,8 +132,6 @@ static void testBinaryArithmeticOperators() {
 
   disassembleChunk(&chunk, "testBinaryArithmeticOperators");
 
-  interpret(&chunk);
-
   freeVM();
 
   freeChunk(&chunk);
@@ -169,9 +163,11 @@ static void testOtherBinaryArithmeticOperators() {
 
   writeChunk(&chunk, OP_RETURN, 123);
 
-  interpret(&chunk);
+  disassembleChunk(&chunk, "testOtherBinaryArithmeticOperators");
 
   freeChunk(&chunk);
+
+  putchar('\n');
 
   // 1 + 2 * 3 = 7
   constant = addConstant(&chunk, 1);
@@ -192,9 +188,11 @@ static void testOtherBinaryArithmeticOperators() {
 
   writeChunk(&chunk, OP_RETURN, 123);
 
-  interpret(&chunk);
+  disassembleChunk(&chunk, "testOtherBinaryArithmeticOperators");
 
   freeChunk(&chunk);
+
+  putchar('\n');
 
   // 3 - 2 - 1 = 0
   constant = addConstant(&chunk, 3);
@@ -215,9 +213,11 @@ static void testOtherBinaryArithmeticOperators() {
 
   writeChunk(&chunk, OP_RETURN, 123);
 
-  interpret(&chunk);
+  disassembleChunk(&chunk, "testOtherBinaryArithmeticOperators");
 
   freeChunk(&chunk);
+
+  putchar('\n');
 
   // 1 + 2 * 3 - 4 / -5 = 7.8
   constant = addConstant(&chunk, 1);
@@ -252,7 +252,7 @@ static void testOtherBinaryArithmeticOperators() {
 
   writeChunk(&chunk, OP_RETURN, 123);
 
-  interpret(&chunk);
+  disassembleChunk(&chunk, "testOtherBinaryArithmeticOperators");
 
   freeVM();
 
@@ -286,7 +286,7 @@ int main(int argc, char *argv[]) {
   run_chunk_tests();
 
   putchar('\n');
-  printf("=====================\n");
+  printf("==========================================\n");
   putchar('\n');
 
   run_vm_tests();
