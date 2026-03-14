@@ -29,7 +29,7 @@ static void testWriteConstantOpcode() {
 
   initChunk(&chunk);
 
-  int constant = addConstant(&chunk, 1.2);
+  int constant = addConstant(&chunk, NUMBER_VAL(1.2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
@@ -70,7 +70,7 @@ static void testInterpretChunkVM() {
 
   initChunk(&chunk);
 
-  int constant = addConstant(&chunk, 1.2);
+  int constant = addConstant(&chunk, NUMBER_VAL(1.2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
@@ -90,7 +90,7 @@ static void testNegateArithmeticOperator() {
 
   initChunk(&chunk);
 
-  int constant = addConstant(&chunk, 1.2);
+  int constant = addConstant(&chunk, NUMBER_VAL(1.2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
   writeChunk(&chunk, OP_NEGATE, 123);
@@ -111,17 +111,17 @@ static void testBinaryArithmeticOperators() {
 
   initChunk(&chunk);
 
-  int constant = addConstant(&chunk, 1.2);
+  int constant = addConstant(&chunk, NUMBER_VAL(1.2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 3.4);
+  constant = addConstant(&chunk, NUMBER_VAL(3.4));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
   writeChunk(&chunk, OP_ADD, 123);
 
-  constant = addConstant(&chunk, 5.6);
+  constant = addConstant(&chunk, NUMBER_VAL(5.6));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
@@ -145,17 +145,17 @@ static void testOtherBinaryArithmeticOperators() {
   initChunk(&chunk);
 
   // 1 * 2 + 3 = 5
-  int constant = addConstant(&chunk, 1);
+  int constant = addConstant(&chunk, NUMBER_VAL(1));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 2);
+  constant = addConstant(&chunk, NUMBER_VAL(2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
   writeChunk(&chunk, OP_MULTIPLY, 123);
 
-  constant = addConstant(&chunk, 3);
+  constant = addConstant(&chunk, NUMBER_VAL(3));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
@@ -170,15 +170,15 @@ static void testOtherBinaryArithmeticOperators() {
   putchar('\n');
 
   // 1 + 2 * 3 = 7
-  constant = addConstant(&chunk, 1);
+  constant = addConstant(&chunk, NUMBER_VAL(1));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 2);
+  constant = addConstant(&chunk, NUMBER_VAL(2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 3);
+  constant = addConstant(&chunk, NUMBER_VAL(3));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
@@ -195,17 +195,17 @@ static void testOtherBinaryArithmeticOperators() {
   putchar('\n');
 
   // 3 - 2 - 1 = 0
-  constant = addConstant(&chunk, 3);
+  constant = addConstant(&chunk, NUMBER_VAL(3));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 2);
+  constant = addConstant(&chunk, NUMBER_VAL(2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
   writeChunk(&chunk, OP_SUBTRACT, 123);
 
-  constant = addConstant(&chunk, 1);
+  constant = addConstant(&chunk, NUMBER_VAL(1));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
@@ -220,15 +220,15 @@ static void testOtherBinaryArithmeticOperators() {
   putchar('\n');
 
   // 1 + 2 * 3 - 4 / -5 = 7.8
-  constant = addConstant(&chunk, 1);
+  constant = addConstant(&chunk, NUMBER_VAL(1));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 2);
+  constant = addConstant(&chunk, NUMBER_VAL(2));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 3);
+  constant = addConstant(&chunk, NUMBER_VAL(3));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
@@ -236,11 +236,11 @@ static void testOtherBinaryArithmeticOperators() {
 
   writeChunk(&chunk, OP_ADD, 123);
 
-  constant = addConstant(&chunk, 4);
+  constant = addConstant(&chunk, NUMBER_VAL(4));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 
-  constant = addConstant(&chunk, 5);
+  constant = addConstant(&chunk, NUMBER_VAL(5));
   writeChunk(&chunk, OP_CONSTANT, 123);
   writeChunk(&chunk, constant, 123);
 

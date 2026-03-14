@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 
 #include "common.h"
@@ -7,10 +8,36 @@
 
 VM vm;
 
+// Forward declarations
+static Value peek(int distance);
+
 static void resetStack() {
   // Set the stack top to the beginning of the stack (decays to a pointer to the
   // first element)
   vm.stackTop = vm.stack;
+}
+
+static void runtimeError(const char *format, ...) {
+  // Format error message
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+
+  fputs("\n", stderr);
+
+  // Extract the problematic instruction's offset by subtracting the chunk's
+  // bytecode array's base address from the instruction pointer (which points to
+  // the next instruction to execute)
+  size_t instruction = vm.ip - vm.chunk->code - 1;
+
+  // Get instruction line
+  int line = vm.chunk->lines[instruction];
+
+  // Print it
+  fprintf(stderr, "[line %d] in script\n", line);
+
+  resetStack();
 }
 
 void initVM() { resetStack(); }
@@ -21,11 +48,15 @@ static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 
-#define BINARY_OP(op)                                                          \
+#define BINARY_OP(valueType, op)                                               \
   do {                                                                         \
-    double b = pop();                                                          \
-    double a = pop();                                                          \
-    push(a op b);                                                              \
+    if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {                          \
+      runtimeError("Operands must be numbers.");                               \
+      return INTERPRET_RUNTIME_ERROR;                                          \
+    }                                                                          \
+    double b = AS_NUMBER(pop());                                               \
+    double a = AS_NUMBER(pop());                                               \
+    push(valueType(a op b));                                                   \
   } while (false)
 
   for (;;) {
@@ -49,19 +80,26 @@ static InterpretResult run() {
       break;
     }
     case OP_ADD:
-      BINARY_OP(+);
+      BINARY_OP(NUMBER_VAL, +);
       break;
     case OP_SUBTRACT:
-      BINARY_OP(-);
+      BINARY_OP(NUMBER_VAL, -);
       break;
     case OP_MULTIPLY:
-      BINARY_OP(*);
+      BINARY_OP(NUMBER_VAL, *);
       break;
     case OP_DIVIDE:
-      BINARY_OP(/);
+      BINARY_OP(NUMBER_VAL, /);
       break;
     case OP_NEGATE:
-      push(-pop());
+      // Look up last pushed value (the operand)
+      if (!IS_NUMBER(peek(0))) {
+        runtimeError("Operand must be a number.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      // Pop, negate, and push
+      push(NUMBER_VAL(-AS_NUMBER(pop())));
       break;
     case OP_RETURN: {
       printValue(pop());
@@ -113,3 +151,7 @@ Value pop() {
   // "unused")
   return *vm.stackTop;
 }
+
+// Return a value from the stack without popping it ('distance' is how far down
+// the stack to peek; 0 is the top)
+static Value peek(int distance) { return vm.stackTop[-1 - distance]; }
