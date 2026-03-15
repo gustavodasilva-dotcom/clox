@@ -8,13 +8,18 @@
 
 VM vm;
 
-// Forward declarations
-static Value peek(int distance);
-
 static void resetStack() {
   // Set the stack top to the beginning of the stack (decays to a pointer to the
   // first element)
   vm.stackTop = vm.stack;
+}
+
+// Return a value from the stack without popping it ('distance' is how far down
+// the stack to peek; 0 is the top)
+static Value peek(int distance) { return vm.stackTop[-1 - distance]; }
+
+static bool isFalsey(Value value) {
+  return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
 static void runtimeError(const char *format, ...) {
@@ -79,6 +84,26 @@ static InterpretResult run() {
       push(constant);
       break;
     }
+    case OP_NIL:
+      push(NIL_VAL);
+      break;
+    case OP_TRUE:
+      push(BOOL_VAL(true));
+      break;
+    case OP_FALSE:
+      push(BOOL_VAL(false));
+      break;
+    case OP_EQUAL:
+      Value b = pop();
+      Value a = pop();
+      push(BOOL_VAL(valuesEqual(a, b)));
+      break;
+    case OP_GREATER:
+      BINARY_OP(BOOL_VAL, >);
+      break;
+    case OP_LESS:
+      BINARY_OP(BOOL_VAL, <);
+      break;
     case OP_ADD:
       BINARY_OP(NUMBER_VAL, +);
       break;
@@ -90,6 +115,9 @@ static InterpretResult run() {
       break;
     case OP_DIVIDE:
       BINARY_OP(NUMBER_VAL, /);
+      break;
+    case OP_NOT:
+      push(BOOL_VAL(isFalsey(pop())));
       break;
     case OP_NEGATE:
       // Look up last pushed value (the operand)
@@ -151,7 +179,3 @@ Value pop() {
   // "unused")
   return *vm.stackTop;
 }
-
-// Return a value from the stack without popping it ('distance' is how far down
-// the stack to peek; 0 is the top)
-static Value peek(int distance) { return vm.stackTop[-1 - distance]; }
