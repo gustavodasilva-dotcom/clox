@@ -210,6 +210,12 @@ static void number() {
   emitConstant(NUMBER_VAL(value));
 }
 
+static void string() {
+  // -1 to exclude the opening quote; -2 to exclude the closing quote
+  emitConstant(OBJ_VAL(
+      copyString(parser.previous.start + 1, parser.previous.length - 2)));
+}
+
 // The order of stack operands is reversed (Polish notation). So, first the
 // operand is compiled. Then, if the operator (which was previously consumed) is
 // a minus sign, the `OP_NEGATE` bytecode is emitted.
@@ -254,7 +260,7 @@ ParseRule rules[] = {
     [TOKEN_LESS] = {NULL, binary, PREC_COMPARISON},
     [TOKEN_LESS_EQUAL] = {NULL, binary, PREC_COMPARISON},
     [TOKEN_IDENTIFIER] = {NULL, NULL, PREC_NONE},
-    [TOKEN_STRING] = {NULL, NULL, PREC_NONE},
+    [TOKEN_STRING] = {string, NULL, PREC_NONE},
     [TOKEN_NUMBER] = {number, NULL, PREC_NONE},
     [TOKEN_AND] = {NULL, NULL, PREC_NONE},
     [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
