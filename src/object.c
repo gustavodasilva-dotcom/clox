@@ -16,6 +16,12 @@ static Obj *allocateObject(size_t size, ObjType type) {
   // Set type
   object->type = type;
 
+  // Point the new object to the current head of the list
+  object->next = vm.objects;
+
+  // Update the head to point to the new object
+  vm.objects = object;
+
   return object;
 }
 

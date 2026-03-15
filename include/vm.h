@@ -12,6 +12,8 @@ typedef struct {
       *ip; // Instruction pointer (points to the next instruction to execute)
   Value stack[STACK_MAX];
   Value *stackTop;
+
+  Obj *objects; // Pointer to the head of the linked list
 } VM;
 
 typedef enum {
@@ -19,6 +21,9 @@ typedef enum {
   INTERPRET_COMPILE_ERROR,
   INTERPRET_RUNTIME_ERROR
 } InterpretResult;
+
+// Expose global variable externally
+extern VM vm;
 
 void initVM();
 void freeVM();

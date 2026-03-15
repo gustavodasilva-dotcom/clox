@@ -75,9 +75,14 @@ static void runtimeError(const char *format, ...) {
   resetStack();
 }
 
-void initVM() { resetStack(); }
+void initVM() {
+  resetStack();
 
-void freeVM() {}
+  // When the VM starts, there are no heap-allocated objects
+  vm.objects = NULL;
+}
+
+void freeVM() { freeObjects(); }
 
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)

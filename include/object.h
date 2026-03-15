@@ -18,6 +18,7 @@ typedef enum {
 // base struct for all heap-allocated objects
 struct Obj {
   ObjType type;
+  struct Obj *next; // Linked list of all heap-allocated objects
 };
 
 // string object (an "inheritance" of 'Obj')
