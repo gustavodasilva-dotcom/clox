@@ -183,9 +183,12 @@ static InterpretResult run() {
       // Pop, negate, and push
       push(NUMBER_VAL(-AS_NUMBER(pop())));
       break;
-    case OP_RETURN: {
+    case OP_PRINT:
       printValue(pop());
       printf("\n");
+      break;
+    case OP_RETURN: {
+      // Exit interpreter
       return INTERPRET_OK;
     }
     }
