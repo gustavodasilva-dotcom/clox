@@ -61,13 +61,7 @@ bool valuesEqual(Value a, Value b) {
   case VAL_NUMBER:
     return AS_NUMBER(a) == AS_NUMBER(b);
   case VAL_OBJ: {
-    // Unwrap the values as string objects
-    ObjString *aString = AS_STRING(a);
-    ObjString *bString = AS_STRING(b);
-
-    // Compare the strings by length and content
-    return aString->length == bString->length &&
-           memcmp(aString->chars, bString->chars, aString->length) == 0;
+    return AS_OBJ(a) == AS_OBJ(b);
   }
   default:
     // Unreachable

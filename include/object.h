@@ -26,6 +26,7 @@ struct ObjString {
   Obj obj; // alignment: 'Obj' must be first field
   int length;
   char *chars;
+  uint32_t hash;
 };
 
 /// @brief Allocates a new string object on the heap.

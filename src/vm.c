@@ -80,9 +80,14 @@ void initVM() {
 
   // When the VM starts, there are no heap-allocated objects
   vm.objects = NULL;
+
+  initTable(&vm.strings);
 }
 
-void freeVM() { freeObjects(); }
+void freeVM() {
+  freeTable(&vm.strings);
+  freeObjects();
+}
 
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)

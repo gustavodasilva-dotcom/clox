@@ -3,6 +3,7 @@
 
 #include "memory.h"
 #include "object.h"
+#include "table.h"
 #include "value.h"
 #include "vm.h"
 
@@ -25,22 +26,61 @@ static Obj *allocateObject(size_t size, ObjType type) {
   return object;
 }
 
-static ObjString *allocateString(char *chars, int length) {
+static ObjString *allocateString(char *chars, int length, uint32_t hash) {
   // Heap-allocate the string object
   ObjString *string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
 
   // Set properties
   string->length = length;
   string->chars = chars;
+  string->hash = hash;
+
+  // Intern string
+  tableSet(&vm.strings, string, NIL_VAL);
 
   return string;
 }
 
+static uint32_t hashString(const char *key, int length) {
+  uint32_t hash = 2166136261u;
+
+  for (int i = 0; i < length; i++) {
+    hash ^= key[i];
+    hash *= 16777619;
+  }
+
+  return hash;
+}
+
 ObjString *takeString(char *chars, int length) {
-  return allocateString(chars, length);
+  // Calculate hash
+  uint32_t hash = hashString(chars, length);
+
+  ObjString *interned = tableFindString(&vm.strings, chars, length, hash);
+
+  if (interned != NULL) {
+    // Free heap-allocated string
+    FREE_ARRAY(char, chars, length + 1);
+
+    // Return interned string
+    return interned;
+  }
+
+  return allocateString(chars, length, hash);
 }
 
 ObjString *copyString(const char *chars, int length) {
+  // Calculate hash
+  uint32_t hash = hashString(chars, length);
+
+  // Lookup interned string
+  ObjString *interned = tableFindString(&vm.strings, chars, length, hash);
+
+  if (interned != NULL) {
+    // Return interned string
+    return interned;
+  }
+
   // Allocate enough memory (+1 for the null terminator)
   char *heapChars = ALLOCATE(char, length + 1);
 
@@ -50,7 +90,7 @@ ObjString *copyString(const char *chars, int length) {
   // Null-terminate
   heapChars[length] = '\0';
 
-  return allocateString(heapChars, length);
+  return allocateString(heapChars, length, hash);
 }
 
 void printObject(Value value) {
