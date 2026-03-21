@@ -328,7 +328,7 @@ static ParseRule *getRule(TokenType type) { return &rules[type]; };
 static void expression() { parsePrecedence(PREC_ASSIGNMENT); }
 
 static void printStatement() {
-  // Parse expression (push onto stack)
+  // Compile expression (push onto stack)
   expression();
 
   consume(TOKEN_SEMICOLON, "Expect \";\" after value.");
@@ -337,9 +337,21 @@ static void printStatement() {
   emitByte(OP_PRINT);
 }
 
+static void expressionStatement() {
+  // Compile expression (produces a value on the stack)
+  expression();
+
+  consume(TOKEN_SEMICOLON, "Expect \";\" after expression.");
+
+  // Discard the value left on the stack
+  emitByte(OP_POP);
+}
+
 static void statement() {
   if (match(TOKEN_PRINT)) {
     printStatement();
+  } else {
+    expressionStatement();
   }
 }
 
