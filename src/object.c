@@ -73,7 +73,7 @@ ObjString *copyString(const char *chars, int length) {
   // Calculate hash
   uint32_t hash = hashString(chars, length);
 
-  // Lookup interned string
+  // Look up interned string
   ObjString *interned = tableFindString(&vm.strings, chars, length, hash);
 
   if (interned != NULL) {

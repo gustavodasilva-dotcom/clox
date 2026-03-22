@@ -81,10 +81,12 @@ void initVM() {
   // When the VM starts, there are no heap-allocated objects
   vm.objects = NULL;
 
+  initTable(&vm.globals);
   initTable(&vm.strings);
 }
 
 void freeVM() {
+  freeTable(&vm.globals);
   freeTable(&vm.strings);
   freeObjects();
 }
@@ -92,6 +94,7 @@ void freeVM() {
 static InterpretResult run() {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+#define READ_STRING() AS_STRING(READ_CONSTANT())
 
 #define BINARY_OP(valueType, op)                                               \
   do {                                                                         \
@@ -124,6 +127,7 @@ static InterpretResult run() {
       push(constant);
       break;
     }
+
     case OP_NIL:
       push(NIL_VAL);
       break;
@@ -136,18 +140,66 @@ static InterpretResult run() {
     case OP_POP:
       pop();
       break;
-    case OP_EQUAL:
+
+    case OP_GET_GLOBAL: {
+      // Read variable name from the constant pool
+      ObjString *name = READ_STRING();
+
+      Value value;
+
+      // Get variable value from the global variables hash table
+      if (!tableGet(&vm.globals, name, &value)) {
+        runtimeError("Undefined variable \"%s\".", name->chars);
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      // Push variable value onto the stack
+      push(value);
+      break;
+    }
+
+    case OP_DEFINE_GLOBAL: {
+      // Read variable name from the constant pool
+      ObjString *name = READ_STRING();
+
+      // Look up variable value (the initializer) from the top of the stack
+      tableSet(&vm.globals, name, peek(0));
+
+      // Pop value from the stack
+      pop();
+      break;
+    }
+
+    case OP_SET_GLOBAL: {
+      // Read variable name from the constant pool
+      ObjString *name = READ_STRING();
+
+      // Set variable value in the global variables hash table
+      if (tableSet(&vm.globals, name, peek(0))) {
+        // If the variable was newly defined, delete it and report an error
+        tableDelete(&vm.globals, name);
+
+        runtimeError("Undefined variable \"%s\".", name->chars);
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      break;
+    }
+
+    case OP_EQUAL: {
       Value b = pop();
       Value a = pop();
       push(BOOL_VAL(valuesEqual(a, b)));
       break;
+    }
+
     case OP_GREATER:
       BINARY_OP(BOOL_VAL, >);
       break;
     case OP_LESS:
       BINARY_OP(BOOL_VAL, <);
       break;
-    case OP_ADD:
+
+    case OP_ADD: {
       if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
         // If operands are strings, concatenate
         concatenate();
@@ -164,6 +216,8 @@ static InterpretResult run() {
         return INTERPRET_RUNTIME_ERROR;
       }
       break;
+    }
+
     case OP_SUBTRACT:
       BINARY_OP(NUMBER_VAL, -);
       break;
@@ -176,7 +230,8 @@ static InterpretResult run() {
     case OP_NOT:
       push(BOOL_VAL(isFalsey(pop())));
       break;
-    case OP_NEGATE:
+
+    case OP_NEGATE: {
       // Look up last pushed value (the operand)
       if (!IS_NUMBER(peek(0))) {
         runtimeError("Operand must be a number.");
@@ -186,10 +241,14 @@ static InterpretResult run() {
       // Pop, negate, and push
       push(NUMBER_VAL(-AS_NUMBER(pop())));
       break;
-    case OP_PRINT:
+    }
+
+    case OP_PRINT: {
       printValue(pop());
       printf("\n");
       break;
+    }
+
     case OP_RETURN: {
       // Exit interpreter
       return INTERPRET_OK;
@@ -199,6 +258,7 @@ static InterpretResult run() {
 
 #undef READ_BYTE
 #undef READ_CONSTANT
+#undef READ_STRING
 #undef BINARY_OP
 }
 
