@@ -337,6 +337,39 @@ static void printStatement() {
   emitByte(OP_PRINT);
 }
 
+static void synchronize() {
+  // Reset panic mode
+  parser.panicMode = false;
+
+  // Discard tokens until a statement boundary is found
+  while (parser.current.type != TOKEN_EOF) {
+    if (parser.previous.type == TOKEN_SEMICOLON) {
+      // Return if the previous token was a statement terminator
+      return;
+    }
+
+    // Return if the current token is a keyword that can start a statement
+    switch (parser.current.type) {
+    case TOKEN_CLASS:
+    case TOKEN_FUN:
+    case TOKEN_VAR:
+    case TOKEN_FOR:
+    case TOKEN_IF:
+    case TOKEN_WHILE:
+    case TOKEN_PRINT:
+    case TOKEN_RETURN:
+      return;
+
+    default:
+        // Do nothing
+        ;
+    }
+
+    // Discard the current token
+    advance();
+  }
+}
+
 static void expressionStatement() {
   // Compile expression (produces a value on the stack)
   expression();
@@ -355,7 +388,14 @@ static void statement() {
   }
 }
 
-static void declaration() { statement(); }
+static void declaration() {
+  statement();
+
+  if (parser.panicMode) {
+    // Error recovery at statement boundary
+    synchronize();
+  }
+}
 
 bool compile(const char *source, Chunk *chunk) {
   initScanner(source);
