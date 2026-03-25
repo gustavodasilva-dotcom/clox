@@ -193,6 +193,11 @@ static int resolveLocal(Compiler *compiler, Token *name) {
     Local *local = &compiler->locals[i];
 
     if (identifiersEqual(name, &local->name)) {
+      // Check if the variable is uninitialized
+      if (local->depth == -1) {
+        error("Can't read local variable in its own initializer.");
+      }
+
       return i;
     }
   }
@@ -208,7 +213,9 @@ static void addLocal(Token name) {
 
   Local *local = &current->locals[current->localCount++];
   local->name = name;
-  local->depth = current->scopeDepth;
+
+  // Mark the variable as uninitialized
+  local->depth = -1;
 }
 
 static void declareVariable() {
@@ -250,9 +257,14 @@ static uint8_t parseVariable(const char *errorMessage) {
   return identifierConstant(&parser.previous);
 }
 
+static void markInitialized() {
+  current->locals[current->localCount - 1].depth = current->scopeDepth;
+}
+
 static void defineVariable(uint8_t global) {
   // Local variables are implicitly defined when they are declared
   if (current->scopeDepth > 0) {
+    markInitialized();
     return;
   }
 
