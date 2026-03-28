@@ -130,6 +130,23 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
   emitByte(byte2);
 }
 
+static void emitLoop(int loopStart) {
+  emitByte(OP_LOOP);
+
+  // Calculate the jump offset by subtracting the loop start's offset from the
+  // current offset, and adding 2 to account for the jump instruction's own
+  // bytecode
+  int offset = currentChunk()->count - loopStart + 2;
+
+  if (offset > UINT16_MAX) {
+    error("Loop body too large.");
+  }
+
+  // A 16-bit operand is reserved for the jump offset
+  emitByte((offset >> 8) & 0xff);
+  emitByte(offset & 0xff);
+}
+
 static int emitJump(uint8_t instruction) {
   emitByte(instruction);
 
@@ -582,6 +599,37 @@ static void printStatement() {
   emitByte(OP_PRINT);
 }
 
+/// @brief Compiles a while statement, which has the following syntax:
+/// ```lox
+/// while (condition) body
+/// ```
+static void whileStatement() {
+  // Remember the offset of the beginning of the loop
+  int loopStart = currentChunk()->count;
+
+  consume(TOKEN_LEFT_PAREN, "Expect \"(\" after \"while\".");
+
+  expression();
+
+  consume(TOKEN_RIGHT_PAREN, "Expect \")\" after condition.");
+
+  // Skip the body if the condition is falsy
+  int exitJump = emitJump(OP_JUMP_IF_FALSE);
+
+  // If the condition is truthy, pop its value from the stack
+  emitByte(OP_POP);
+
+  statement();
+
+  // Loop back to the beginning of the loop to re-evaluate the condition
+  emitLoop(loopStart);
+
+  patchJump(exitJump);
+
+  // If the condition is falsy, pop its value from the stack
+  emitByte(OP_POP);
+}
+
 static void synchronize() {
   // Reset panic mode
   parser.panicMode = false;
@@ -629,8 +677,6 @@ static void expressionStatement() {
 /// ```lox
 /// if (condition) thenBranch else elseBranch
 /// ```
-/// Ensures that the condition's value is popped from the stack, regardless of
-/// whether it's truthy or falsy.
 static void ifStatement() {
   consume(TOKEN_LEFT_PAREN, "Expect \"(\" after \"if\".");
 
@@ -663,6 +709,8 @@ static void statement() {
     printStatement();
   } else if (match(TOKEN_IF)) {
     ifStatement();
+  } else if (match(TOKEN_WHILE)) {
+    whileStatement();
   } else if (match(TOKEN_LEFT_BRACE)) {
     beginScope();
     block();

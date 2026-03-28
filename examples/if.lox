@@ -1,14 +1,14 @@
 if (1 > 0) print "If working!";
 
 if (0 == 0)
-    print "Then branch.";
+	print "Then branch.";
 else
-    print "Else branch.";
+	print "Else branch.";
 
 if (1 == 0)
-    print "Then branch.";
+	print "Then branch.";
 else
-    print "Else branch.";
+	print "Else branch.";
 
 if (1 == 1 and 0 == 0) print "And branching.";
 
