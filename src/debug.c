@@ -25,6 +25,22 @@ static int byteInstruction(const char *name, Chunk *chunk, int offset) {
   return offset + 2;
 }
 
+static int jumpInstruction(const char *name, int sign, Chunk *chunk,
+                           int offset) {
+  // High byte of the jump offset
+  uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
+
+  // Low byte of the jump offset
+  jump |= chunk->code[offset + 2];
+
+  // Print the instruction name, the offset of the jump operand, and the offset
+  // of the instruction to jump to (current offset + size of the jump
+  // instruction + jump offset)
+  printf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
+
+  return offset + 3;
+}
+
 static int constantInstruction(const char *name, Chunk *chunk, int offset) {
   // Get the constant index from the byte after the opcode (index of the
   // constant in the constants array)
@@ -97,6 +113,10 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     return simpleInstruction("OP_NEGATE", offset);
   case OP_PRINT:
     return simpleInstruction("OP_PRINT", offset);
+  case OP_JUMP:
+    return jumpInstruction("OP_JUMP", 1, chunk, offset);
+  case OP_JUMP_IF_FALSE:
+    return jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset);
   case OP_RETURN:
     return simpleInstruction("OP_RETURN", offset);
   default:

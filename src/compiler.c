@@ -596,6 +596,12 @@ static void expressionStatement() {
   emitByte(OP_POP);
 }
 
+/// @brief Compiles an if statement, which has the following syntax:
+/// ```lox
+/// if (condition) thenBranch else elseBranch
+/// ```
+/// Ensures that the condition's value is popped from the stack, regardless of
+/// whether it's truthy or falsy.
 static void ifStatement() {
   consume(TOKEN_LEFT_PAREN, "Expect \"(\" after \"if\".");
 
@@ -604,9 +610,23 @@ static void ifStatement() {
   consume(TOKEN_RIGHT_PAREN, "Expect \")\" after condition.");
 
   int thenJump = emitJump(OP_JUMP_IF_FALSE);
+
+  // If the condition is truthy, pop its value from the stack
+  emitByte(OP_POP);
   statement();
 
+  int elseJump = emitJump(OP_JUMP);
+
   patchJump(thenJump);
+
+  // If the condition is falsy, pop its value from the stack
+  emitByte(OP_POP);
+
+  if (match(TOKEN_ELSE)) {
+    statement();
+  }
+
+  patchJump(elseJump);
 }
 
 static void statement() {
