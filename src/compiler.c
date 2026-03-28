@@ -294,6 +294,21 @@ static void defineVariable(uint8_t global) {
   emitBytes(OP_DEFINE_GLOBAL, global);
 }
 
+/// @brief Compiles the right operand of a logical expression, e.g., in `a and
+/// b`, compiles `b` and emits a jump to skip it if `a` is falsy.
+static void and_(bool canAssign) {
+  // Jump the right operand if the left one is falsy
+  int endJump = emitJump(OP_JUMP_IF_FALSE);
+
+  // Pop the left operand's value from the stack
+  emitByte(OP_POP);
+
+  // Compile the right operand
+  parsePrecedence(PREC_AND);
+
+  patchJump(endJump);
+}
+
 // Compiles the right operand of a binary expression.
 static void binary(bool canAssign) {
   // Remember the (infix) operator
@@ -373,6 +388,20 @@ static void grouping(bool canAssign) {
 static void number(bool canAssign) {
   double value = strtod(parser.previous.start, NULL);
   emitConstant(NUMBER_VAL(value));
+}
+
+/// @brief Compiles the right operand of a logical expression, e.g., in `a or
+/// b`, compiles `b` and emits a jump to skip it if `a` is truthy.
+static void or_(bool canAssign) {
+  // Jump the right operand if the left one is truthy
+  int elseJump = emitJump(OP_JUMP_IF_FALSE);
+  int endJump = emitJump(OP_JUMP);
+
+  patchJump(elseJump);
+  emitByte(OP_POP);
+
+  parsePrecedence(PREC_OR);
+  patchJump(endJump);
 }
 
 static void string(bool canAssign) {
@@ -457,7 +486,7 @@ ParseRule rules[] = {
     [TOKEN_IDENTIFIER] = {variable, NULL, PREC_NONE},
     [TOKEN_STRING] = {string, NULL, PREC_NONE},
     [TOKEN_NUMBER] = {number, NULL, PREC_NONE},
-    [TOKEN_AND] = {NULL, NULL, PREC_NONE},
+    [TOKEN_AND] = {NULL, and_, PREC_AND},
     [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
     [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
     [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
@@ -465,7 +494,7 @@ ParseRule rules[] = {
     [TOKEN_FUN] = {NULL, NULL, PREC_NONE},
     [TOKEN_IF] = {NULL, NULL, PREC_NONE},
     [TOKEN_NIL] = {literal, NULL, PREC_NONE},
-    [TOKEN_OR] = {NULL, NULL, PREC_NONE},
+    [TOKEN_OR] = {NULL, or_, PREC_OR},
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
