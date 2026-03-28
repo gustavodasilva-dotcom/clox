@@ -673,6 +673,81 @@ static void expressionStatement() {
   emitByte(OP_POP);
 }
 
+/// @brief Compiles a for statement, which has the following syntax:
+/// ```lox
+/// for (initializer; condition; increment) body
+/// ```
+static void forStatement() {
+  // Create a new scope for the loop's initializer and control variables
+  beginScope();
+
+  consume(TOKEN_LEFT_PAREN, "Expect \"(\" after \"for\".");
+
+  // Compile initializer (if any)
+  if (match(TOKEN_SEMICOLON)) {
+    // No initializer
+  } else if (match(TOKEN_VAR)) {
+    varDeclaration();
+  } else {
+    expressionStatement();
+  }
+
+  int loopStart = currentChunk()->count;
+
+  // Compile condition clause
+  int exitJump = -1;
+  if (!match(TOKEN_SEMICOLON)) {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect \";\" after loop condition.");
+
+    // Jump out of the loop if the condition is false
+    exitJump = emitJump(OP_JUMP_IF_FALSE);
+
+    // Condition
+    emitByte(OP_POP);
+  }
+
+  // Compile increment clause
+  if (!match(TOKEN_RIGHT_PAREN)) {
+    // Since the increment clause is executed after the body, jump over it
+    int bodyJump = emitJump(OP_JUMP);
+
+    // Point in which the increment clause starts
+    int incrementStart = currentChunk()->count;
+
+    // Compile increment and pop its value from the stack
+    expression();
+    emitByte(OP_POP);
+
+    consume(TOKEN_RIGHT_PAREN, "Expect \")\" after for clauses.");
+
+    // Jump back to re-evaluate the condition after executing the increment
+    // clause
+    emitLoop(loopStart);
+
+    // Update loop start to the beginning of the increment clause, so that the
+    // loop will jump to the increment after executing the body
+    loopStart = incrementStart;
+
+    patchJump(bodyJump);
+  }
+
+  statement();
+
+  emitLoop(loopStart);
+
+  // Patch the jump to exit the loop if there was a condition clause
+  if (exitJump != -1) {
+    patchJump(exitJump);
+
+    // Condition
+    emitByte(OP_POP);
+  }
+
+  // End the loop's scope to discard any control variables
+  endScope();
+}
+
 /// @brief Compiles an if statement, which has the following syntax:
 /// ```lox
 /// if (condition) thenBranch else elseBranch
@@ -707,6 +782,8 @@ static void ifStatement() {
 static void statement() {
   if (match(TOKEN_PRINT)) {
     printStatement();
+  } else if (match(TOKEN_FOR)) {
+    forStatement();
   } else if (match(TOKEN_IF)) {
     ifStatement();
   } else if (match(TOKEN_WHILE)) {
