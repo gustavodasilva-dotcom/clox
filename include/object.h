@@ -1,17 +1,21 @@
 #ifndef clox_object_h
 #define clox_object_h
 
+#include "chunk.h"
 #include "common.h"
 #include "value.h"
 
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
 
+#define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION);
 #define IS_STRING(value) isObjType(value, OBJ_STRING)
 
+#define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)
 
 typedef enum {
+  OBJ_FUNCTION,
   OBJ_STRING,
 } ObjType;
 
@@ -21,13 +25,25 @@ struct Obj {
   struct Obj *next; // Linked list of all heap-allocated objects
 };
 
+// function object (an "inheritance" of 'Obj')
+typedef struct {
+  Obj obj;   // Alignment: 'Obj' must be first field
+  int arity; // Number of parameters
+  Chunk chunk;
+  ObjString *name;
+} ObjFunction;
+
 // string object (an "inheritance" of 'Obj')
 struct ObjString {
-  Obj obj; // alignment: 'Obj' must be first field
+  Obj obj; // Alignment: 'Obj' must be first field
   int length;
   char *chars;
   uint32_t hash;
 };
+
+/// @brief Allocates a new function object on the heap.
+/// @return A pointer to the heap-allocated function object
+ObjFunction *newFunction();
 
 /// @brief Allocates a new string object on the heap.
 /// @param chars The string

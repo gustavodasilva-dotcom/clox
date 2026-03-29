@@ -15,6 +15,9 @@ static void resetStack() {
   // Set the stack top to the beginning of the stack (decays to a pointer to the
   // first element)
   vm.stackTop = vm.stack;
+
+  // Empty call frame stack
+  vm.frameCount = 0;
 }
 
 // Return a value from the stack without popping it ('distance' is how far down
@@ -61,13 +64,15 @@ static void runtimeError(const char *format, ...) {
 
   fputs("\n", stderr);
 
-  // Extract the problematic instruction's offset by subtracting the chunk's
-  // bytecode array's base address from the instruction pointer (which points to
-  // the next instruction to execute)
-  size_t instruction = vm.ip - vm.chunk->code - 1;
+  // Current topmost call frame
+  CallFrame *frame = &vm.frames[vm.frameCount - 1];
 
-  // Get instruction line
-  int line = vm.chunk->lines[instruction];
+  // Get the instruction that caused the error (the most recently executed
+  // instruction, which is the one before the current instruction pointer)
+  size_t instruction = frame->ip - frame->function->chunk.code - 1;
+
+  // Get the line number of that instruction
+  int line = frame->function->chunk.lines[instruction];
 
   // Print it
   fprintf(stderr, "[line %d] in script\n", line);
@@ -92,9 +97,13 @@ void freeVM() {
 }
 
 static InterpretResult run() {
-#define READ_BYTE() (*vm.ip++)
-#define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
-#define READ_SHORT() (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
+  // Current topmost call frame
+  CallFrame *frame = &vm.frames[vm.frameCount - 1];
+
+#define READ_BYTE() (*frame->ip++)
+#define READ_SHORT()                                                           \
+  (frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
+#define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
 
 #define BINARY_OP(valueType, op)                                               \
@@ -117,7 +126,8 @@ static InterpretResult run() {
       printf(" ]");
     }
     printf("\n");
-    disassembleInstruction(vm.chunk, (int)(vm.ip - vm.chunk->code));
+    disassembleInstruction(&frame->function->chunk,
+                           (int)(frame->ip - frame->function->chunk.code));
 #endif
 
     uint8_t instruction;
@@ -144,13 +154,13 @@ static InterpretResult run() {
 
     case OP_GET_LOCAL: {
       uint8_t slot = READ_BYTE();
-      push(vm.stack[slot]);
+      push(frame->slots[slot]);
       break;
     }
 
     case OP_SET_LOCAL: {
       uint8_t slot = READ_BYTE();
-      vm.stack[slot] = peek(0);
+      frame->slots[slot] = peek(0);
       break;
     }
 
@@ -264,13 +274,13 @@ static InterpretResult run() {
 
     case OP_JUMP: {
       uint16_t offset = READ_SHORT();
-      vm.ip += offset;
+      frame->ip += offset;
       break;
     }
 
     case OP_LOOP: {
       uint16_t offset = READ_SHORT();
-      vm.ip -= offset;
+      frame->ip -= offset;
       break;
     }
 
@@ -279,7 +289,7 @@ static InterpretResult run() {
 
       if (isFalsey(peek(0))) {
         // Jump by moving the instruction pointer forward by the jump offset
-        vm.ip += offset;
+        frame->ip += offset;
       }
       break;
     }
@@ -299,26 +309,28 @@ static InterpretResult run() {
 }
 
 InterpretResult interpret(const char *source) {
-  Chunk chunk;
-  initChunk(&chunk);
+  ObjFunction *function = compile(source);
 
-  if (!compile(source, &chunk)) {
-    freeChunk(&chunk);
+  if (function == NULL) {
     return INTERPRET_COMPILE_ERROR;
   }
 
-  // Pass chunk to VM by reference (pointer)
-  vm.chunk = &chunk;
+  // Push compiled function onto the stack so it can be called by the VM's main
+  // loop
+  push(OBJ_VAL(function));
 
-  // Point the instruction pointer to the beginning of the chunk's bytecode
-  // array
-  vm.ip = vm.chunk->code;
+  CallFrame *frame = &vm.frames[vm.frameCount++];
+  frame->function = function;
 
-  InterpretResult result = run();
+  // Point the call frame's instruction pointer to the beginning of the
+  // function's bytecode
+  frame->ip = function->chunk.code;
 
-  freeChunk(&chunk);
+  // The slot zero (previously reserved by the compiler) stores the function
+  // being called
+  frame->slots = vm.stack;
 
-  return result;
+  return run();
 }
 
 void push(Value value) {
