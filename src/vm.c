@@ -20,9 +20,96 @@ static void resetStack() {
   vm.frameCount = 0;
 }
 
-// Return a value from the stack without popping it ('distance' is how far down
-// the stack to peek; 0 is the top)
+static void runtimeError(const char *format, ...) {
+  // Format error message
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+
+  fputs("\n", stderr);
+
+  // Print stack trace (from most recent call frame to oldest)
+  for (int i = vm.frameCount - 1; i >= 0; i--) {
+    // Get call frame at index
+    CallFrame *frame = &vm.frames[i];
+
+    // Get the function being called in the current call frame
+    ObjFunction *function = frame->function;
+
+    // -1 because the instruction pointer is sitting on the next instruction to
+    // be executed
+    size_t instruction = frame->ip - function->chunk.code - 1;
+
+    fprintf(stderr, "[line %d] in ", function->chunk.lines[instruction]);
+
+    if (function->name == NULL) {
+      fprintf(stderr, "script\n");
+    } else {
+      fprintf(stderr, "%s()\n", function->name->chars);
+    }
+  }
+
+  resetStack();
+}
+
+/// @brief Returns a value from the stack without popping it.
+/// @param distance How far down the stack to peek; 0 is the top)
+/// @return The value at the given distance from the top of the stack
 static Value peek(int distance) { return vm.stackTop[-1 - distance]; }
+
+/// @brief Sets up a call frame to call the given function.
+/// @param function The function to call
+/// @param argCount The number of arguments being passed to the function
+/// @return `true` if the call was successful, `false` if it failed
+static bool call(ObjFunction *function, int argCount) {
+  // Runtime arity check
+  if (argCount != function->arity) {
+    runtimeError("Expected %d arguments but got %d.", function->arity,
+                 argCount);
+    return false;
+  }
+
+  // Runtime stack overflow check
+  if (vm.frameCount == FRAMES_MAX) {
+    runtimeError("Stack overflow.");
+    return false;
+  }
+
+  // Get call frame and set it up to call the given function
+  CallFrame *frame = &vm.frames[vm.frameCount++];
+  frame->function = function;
+
+  // Point the call frame's instruction pointer to the beginning of the
+  // function's bytecode
+  frame->ip = function->chunk.code;
+
+  // Line up the call frame's slots with the function's arguments on the stack
+  // (-1 for the function itself)
+  frame->slots = vm.stackTop - argCount - 1;
+
+  return true;
+}
+
+/// @brief Calls a value with the given number of arguments.
+/// @param callee The value to call
+/// @param argCount The number of arguments being passed to the callee
+/// @return `true` if the call was successful, `false` if it failed
+static bool callValue(Value callee, int argCount) {
+  if (IS_OBJ(callee)) {
+    switch (OBJ_TYPE(callee)) {
+    case OBJ_FUNCTION:
+      return call(AS_FUNCTION(callee), argCount);
+    default:
+      // Non-callable object type.
+      break;
+    }
+  }
+
+  runtimeError("Can only call functions and classes.");
+
+  return false;
+}
 
 static bool isFalsey(Value value) {
   return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
@@ -53,31 +140,6 @@ static void concatenate() {
 
   // Push result
   push(OBJ_VAL(result));
-}
-
-static void runtimeError(const char *format, ...) {
-  // Format error message
-  va_list args;
-  va_start(args, format);
-  vfprintf(stderr, format, args);
-  va_end(args);
-
-  fputs("\n", stderr);
-
-  // Current topmost call frame
-  CallFrame *frame = &vm.frames[vm.frameCount - 1];
-
-  // Get the instruction that caused the error (the most recently executed
-  // instruction, which is the one before the current instruction pointer)
-  size_t instruction = frame->ip - frame->function->chunk.code - 1;
-
-  // Get the line number of that instruction
-  int line = frame->function->chunk.lines[instruction];
-
-  // Print it
-  fprintf(stderr, "[line %d] in script\n", line);
-
-  resetStack();
 }
 
 void initVM() {
@@ -294,9 +356,45 @@ static InterpretResult run() {
       break;
     }
 
+    case OP_CALL: {
+      // Read argument count (operand)
+      int argCount = READ_BYTE();
+
+      if (!callValue(peek(argCount), argCount)) {
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      // Update the current call frame to the callee's
+      frame = &vm.frames[vm.frameCount - 1];
+      break;
+    }
+
     case OP_RETURN: {
-      // Exit interpreter
-      return INTERPRET_OK;
+      // Get return value from the top of the stack
+      Value result = pop();
+
+      // Discard the call frame for the returning function
+      vm.frameCount--;
+
+      // If the call frame stack is empty, it means the VM has finished
+      // executing the top level code
+      if (vm.frameCount == 0) {
+        // Pop the top level script function's value from the stack
+        pop();
+
+        return INTERPRET_OK;
+      }
+
+      // Move the stack top back to the caller's position (i.e. the function
+      // value)
+      vm.stackTop = frame->slots;
+
+      // Push the return value onto the stack (replacing the function value)
+      push(result);
+
+      // Update the current call frame to the caller's
+      frame = &vm.frames[vm.frameCount - 1];
+      break;
     }
     }
   }
@@ -319,16 +417,8 @@ InterpretResult interpret(const char *source) {
   // loop
   push(OBJ_VAL(function));
 
-  CallFrame *frame = &vm.frames[vm.frameCount++];
-  frame->function = function;
-
-  // Point the call frame's instruction pointer to the beginning of the
-  // function's bytecode
-  frame->ip = function->chunk.code;
-
-  // The slot zero (previously reserved by the compiler) stores the function
-  // being called
-  frame->slots = vm.stack;
+  // Call the top level script function with no arguments
+  callValue(OBJ_VAL(function), 0);
 
   return run();
 }

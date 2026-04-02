@@ -42,7 +42,8 @@ typedef struct {
 
 typedef enum { TYPE_FUNCTION, TYPE_SCRIPT } FunctionType;
 
-typedef struct {
+typedef struct Compiler {
+  struct Compiler *enclosing;
   ObjFunction *function;
   FunctionType type;
 
@@ -165,7 +166,11 @@ static int emitJump(uint8_t instruction) {
   return currentChunk()->count - 2;
 }
 
-static void emitReturn() { emitByte(OP_RETURN); }
+/// @brief Emits bytecode to return from the current function.
+static void emitReturn() {
+  emitByte(OP_NIL);
+  emitByte(OP_RETURN);
+}
 
 static uint8_t makeConstant(Value value) {
   int constant = addConstant(currentChunk(), value);
@@ -196,12 +201,19 @@ static void patchJump(int offset) {
 }
 
 static void initCompiler(Compiler *compiler, FunctionType type) {
+  compiler->enclosing = current;
   compiler->function = NULL;
   compiler->type = type;
   compiler->localCount = 0;
   compiler->scopeDepth = 0;
   compiler->function = newFunction();
   current = compiler;
+
+  // Store the function's name
+  if (type != TYPE_SCRIPT) {
+    current->function->name =
+        copyString(parser.previous.start, parser.previous.length);
+  }
 
   // Reserve slot 0 for VM's internal use
   Local *local = &current->locals[current->localCount++];
@@ -222,6 +234,8 @@ static ObjFunction *endCompiler() {
                                          : "<script>");
   }
 #endif
+
+  current = current->enclosing;
 
   return function;
 }
@@ -329,6 +343,11 @@ static uint8_t parseVariable(const char *errorMessage) {
 }
 
 static void markInitialized() {
+  // Prevent global variables from interfering with local variable resolution
+  if (current->scopeDepth == 0) {
+    return;
+  }
+
   current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
@@ -340,6 +359,28 @@ static void defineVariable(uint8_t global) {
   }
 
   emitBytes(OP_DEFINE_GLOBAL, global);
+}
+
+/// @brief Compiles a list of function arguments.
+/// @return The number of arguments compiled.
+static uint8_t argumentList() {
+  uint8_t argCount = 0;
+
+  if (!check(TOKEN_RIGHT_PAREN)) {
+    do {
+      expression();
+
+      if (argCount == 255) {
+        error("Can't have more than 255 arguments.");
+      }
+
+      argCount++;
+    } while (match(TOKEN_COMMA));
+  }
+
+  consume(TOKEN_RIGHT_PAREN, "Expect \")\" after arguments.");
+
+  return argCount;
 }
 
 /// @brief Compiles the right operand of a logical expression, e.g., in `a and
@@ -357,7 +398,7 @@ static void and_(bool canAssign) {
   patchJump(endJump);
 }
 
-// Compiles the right operand of a binary expression.
+// @brief Compiles the right operand of a binary expression.
 static void binary(bool canAssign) {
   // Remember the (infix) operator
   TokenType operatorType = parser.previous.type;
@@ -409,6 +450,17 @@ static void binary(bool canAssign) {
   }
 }
 
+/// @brief Compiles a function call expression.
+static void call(bool canAssign) {
+  // Compile argument list (push them onto the stack)
+  uint8_t argCount = argumentList();
+
+  // The instruction operand is the argument count
+  emitBytes(OP_CALL, argCount);
+}
+
+/// @brief Compiles a literal expression, which can be `true`, `false`, or
+/// `nil`.
 static void literal(bool canAssign) {
   switch (parser.previous.type) {
   case TOKEN_FALSE:
@@ -512,7 +564,7 @@ static void unary(bool canAssign) {
 }
 
 ParseRule rules[] = {
-    [TOKEN_LEFT_PAREN] = {grouping, NULL, PREC_NONE},
+    [TOKEN_LEFT_PAREN] = {grouping, call, PREC_CALL},
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACE] = {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE] = {NULL, NULL, PREC_NONE},
@@ -604,6 +656,71 @@ static void block() {
   consume(TOKEN_RIGHT_BRACE, "Expect \"}\" after block.");
 }
 
+/// @brief Compiles a function, which has the following syntax:
+/// ```lox
+/// fun functionName(parameters) body
+/// ```
+/// @param type The type of function being compiled
+///
+/// The resulting function object is left on top of the stack as a value.
+static void function(FunctionType type) {
+  // Create a new compiler for the function being compiled
+  Compiler compiler;
+  initCompiler(&compiler, type);
+
+  beginScope();
+
+  // Compile the parameter list
+  consume(TOKEN_LEFT_PAREN, "Expect \"(\" after function name.");
+
+  if (!check(TOKEN_RIGHT_PAREN)) {
+    do {
+      current->function->arity++;
+
+      if (current->function->arity > 255) {
+        errorAtCurrent("Can't have more than 255 parameters.");
+      }
+
+      // Compile and, subsequently, define, since parameters are not initialized
+      uint8_t paramConstant = parseVariable("Expect parameter name.");
+      defineVariable(paramConstant);
+    } while (match(TOKEN_COMMA));
+  }
+
+  consume(TOKEN_RIGHT_PAREN, "Expect \")\" after parameters.");
+
+  // The body
+  consume(TOKEN_LEFT_BRACE, "Expect \"{\" before function body.");
+  block();
+
+  // Create the function object
+  ObjFunction *function = endCompiler();
+  emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+}
+
+/// @brief Compiles a function declaration, which has the following syntax:
+/// ```lox
+/// fun functionName(parameters) body
+/// ```
+static void funDeclaration() {
+  // Declare the variable
+  uint8_t global = parseVariable("Expect function name.");
+
+  // Allow, at compile time, the function to refer to itself in its body by
+  // marking it as initialized, making recursive references possible
+  markInitialized();
+
+  // Parse the function
+  function(TYPE_FUNCTION);
+
+  // Bind the function to the variable
+  defineVariable(global);
+}
+
+/// @brief Compiles a variable declaration, which has the following syntax:
+/// ```lox
+/// var variableName = initializer;
+/// ```
 static void varDeclaration() {
   uint8_t global = parseVariable("Expect variable name.");
 
@@ -620,6 +737,10 @@ static void varDeclaration() {
   defineVariable(global);
 }
 
+/// @brief Compiles a print statement, which has the following syntax:
+/// ```lox
+/// print expression;
+/// ```
 static void printStatement() {
   // Compile expression (push onto stack)
   expression();
@@ -628,6 +749,29 @@ static void printStatement() {
 
   // Emit instruction to print
   emitByte(OP_PRINT);
+}
+
+/// @brief Compiles a return statement, which has the following syntax:
+/// ```lox
+/// return value;
+/// ```
+static void returnStatement() {
+  // Return statements are only valid non-top-level functions
+  if (current->type == TYPE_SCRIPT) {
+    error("Can't return from top-level code.");
+  }
+
+  if (match(TOKEN_SEMICOLON)) {
+    // No return value, so emit bytecode to return nil
+    emitReturn();
+  } else {
+    // Compile return value (push onto stack)
+    expression();
+
+    consume(TOKEN_SEMICOLON, "Expect \";\" after return value.");
+
+    emitByte(OP_RETURN);
+  }
 }
 
 /// @brief Compiles a while statement, which has the following syntax:
@@ -817,6 +961,8 @@ static void statement() {
     forStatement();
   } else if (match(TOKEN_IF)) {
     ifStatement();
+  } else if (match(TOKEN_RETURN)) {
+    returnStatement();
   } else if (match(TOKEN_WHILE)) {
     whileStatement();
   } else if (match(TOKEN_LEFT_BRACE)) {
@@ -829,7 +975,9 @@ static void statement() {
 }
 
 static void declaration() {
-  if (match(TOKEN_VAR)) {
+  if (match(TOKEN_FUN)) {
+    funDeclaration();
+  } else if (match(TOKEN_VAR)) {
     varDeclaration();
   } else {
     statement();
