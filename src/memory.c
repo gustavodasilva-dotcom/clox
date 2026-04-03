@@ -34,7 +34,11 @@ static void freeObject(Obj *object) {
     break;
   }
 
-  case OBJ_STRING:
+  case OBJ_NATIVE:
+    FREE(ObjNative, object);
+    break;
+
+  case OBJ_STRING: {
     ObjString *string = (ObjString *)object;
 
     // Free the string's character data
@@ -43,6 +47,7 @@ static void freeObject(Obj *object) {
     // Free the string object itself
     FREE(ObjString, object);
     break;
+  }
   }
 }
 

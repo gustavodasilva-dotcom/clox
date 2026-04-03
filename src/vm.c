@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "common.h"
 #include "compiler.h"
@@ -10,6 +11,14 @@
 #include "vm.h"
 
 VM vm;
+
+/// @brief Implements the native `clock` function.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @return The current CPU time in seconds
+static Value clockNative(int argCount, Value *args) {
+  return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
 
 static void resetStack() {
   // Set the stack top to the beginning of the stack (decays to a pointer to the
@@ -51,6 +60,23 @@ static void runtimeError(const char *format, ...) {
   }
 
   resetStack();
+}
+
+/// @brief Defines a native function in the global variables hash table.
+/// @param name The name of the native function
+/// @param function A pointer to the native function
+static void defineNative(const char *name, NativeFn function) {
+  // Push the native function's name and the native function itself onto the
+  // stack
+  push(OBJ_VAL(copyString(name, (int)strlen(name))));
+  push(OBJ_VAL(newNative(function)));
+
+  // Define the native function in the global variables hash table
+  tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
+
+  // Pop the native function and its name from the stack
+  pop();
+  pop();
 }
 
 /// @brief Returns a value from the stack without popping it.
@@ -100,6 +126,23 @@ static bool callValue(Value callee, int argCount) {
     switch (OBJ_TYPE(callee)) {
     case OBJ_FUNCTION:
       return call(AS_FUNCTION(callee), argCount);
+
+    case OBJ_NATIVE: {
+      // Cast the callee to a native function
+      NativeFn native = AS_NATIVE(callee);
+
+      // Call the native function
+      Value result = native(argCount, vm.stackTop - argCount);
+
+      // Pop arguments and the callee from the stack
+      vm.stackTop -= argCount + 1;
+
+      // Push the result of the native function call onto the stack
+      push(result);
+
+      return true;
+    }
+
     default:
       // Non-callable object type.
       break;
@@ -150,6 +193,8 @@ void initVM() {
 
   initTable(&vm.globals);
   initTable(&vm.strings);
+
+  defineNative("clock", clockNative);
 }
 
 void freeVM() {
