@@ -35,10 +35,20 @@ typedef struct {
   Precedence precedence;
 } ParseRule;
 
+// Represents a local variable in the current function's scope.
 typedef struct {
   Token name;
   int depth;
+
+  // Indicates whether the variable has been captured by any inner function's
+  // closures
+  bool isCaptured;
 } Local;
+
+typedef struct {
+  uint8_t index;
+  bool isLocal;
+} Upvalue;
 
 typedef enum { TYPE_FUNCTION, TYPE_SCRIPT } FunctionType;
 
@@ -47,8 +57,14 @@ typedef struct Compiler {
   ObjFunction *function;
   FunctionType type;
 
-  Local locals[UINT8_COUNT]; // Local variables and temporaries
+  // Local variables declared in the current function, including parameters
+  Local locals[UINT8_COUNT];
   int localCount;
+
+  // Upvalues for variables from enclosing functions that are captured by the
+  // current function's closures
+  Upvalue upvalues[UINT8_COUNT];
+
   int scopeDepth;
 } Compiler;
 
@@ -218,6 +234,7 @@ static void initCompiler(Compiler *compiler, FunctionType type) {
   // Reserve slot 0 for VM's internal use
   Local *local = &current->locals[current->localCount++];
   local->depth = 0;
+  local->isCaptured = false;
   local->name.start = "";
   local->name.length = 0;
 }
@@ -245,10 +262,18 @@ static void beginScope() { current->scopeDepth++; }
 static void endScope() {
   current->scopeDepth--;
 
-  // Pop local variables that are going out of scope
+  // For each local variable in the scope being exited
   while (current->localCount > 0 &&
          current->locals[current->localCount - 1].depth > current->scopeDepth) {
-    emitByte(OP_POP);
+    if (current->locals[current->localCount - 1].isCaptured) {
+      // It doesn't require an operand, since the value to be closed is on top
+      // of the stack
+      emitByte(OP_CLOSE_UPVALUE);
+    } else {
+      // Pop from the stack
+      emitByte(OP_POP);
+    }
+
     current->localCount--;
   }
 }
@@ -290,6 +315,69 @@ static int resolveLocal(Compiler *compiler, Token *name) {
   return -1;
 }
 
+/// @brief Adds an upvalue for a variable with the given index and local status.
+/// @param compiler The compiler for the function currently being compiled
+/// @param index The index of the variable
+/// @param isLocal A flag indicating whether the variable is local
+/// @return The index of the upvalue, or -1 if not found
+static int addUpvalue(Compiler *compiler, uint8_t index, bool isLocal) {
+  int upvalueCount = compiler->function->upvalueCount;
+
+  // Check if the upvalue already exists for the given variable
+  for (int i = 0; i < upvalueCount; i++) {
+    Upvalue *upvalue = &compiler->upvalues[i];
+
+    if (upvalue->index == index && upvalue->isLocal == isLocal) {
+      return i;
+    }
+  }
+
+  // Check if there is room to add a new upvalue
+  if (upvalueCount == UINT8_COUNT) {
+    error("Too many closure variables in function.");
+    return 0;
+  }
+
+  // Add a new upvalue for the given variable
+  compiler->upvalues[upvalueCount].isLocal = isLocal;
+  compiler->upvalues[upvalueCount].index = index;
+
+  // Return the index of the new upvalue
+  return compiler->function->upvalueCount++;
+}
+
+/// @brief Resolves an upvalue for a variable with the given name in an
+/// enclosing function.
+/// @param compiler The compiler for the function currently being compiled
+/// @param name The token representing the variable name
+/// @return The index of the upvalue, or -1 if not found
+static int resolveUpvalue(Compiler *compiler, Token *name) {
+  if (compiler->enclosing == NULL) {
+    return -1;
+  }
+
+  // Try to resolve the variable as a local in the immediately enclosing
+  // function
+  int local = resolveLocal(compiler->enclosing, name);
+
+  if (local != -1) {
+    // Mark the local variable from the immediately enclosing function as
+    // captured
+    compiler->enclosing->locals[local].isCaptured = true;
+    return addUpvalue(compiler, (uint8_t)local, true);
+  }
+
+  // Try to resolve the variable as an upvalue in the immediately function
+  // closure
+  int upvalue = resolveUpvalue(compiler->enclosing, name);
+
+  if (upvalue != -1) {
+    return addUpvalue(compiler, (uint8_t)upvalue, false);
+  }
+
+  return -1;
+}
+
 static void addLocal(Token name) {
   if (current->localCount == UINT8_COUNT) {
     error("Too many local variables in function.");
@@ -301,6 +389,7 @@ static void addLocal(Token name) {
 
   // Mark the variable as uninitialized
   local->depth = -1;
+  local->isCaptured = false;
 }
 
 static void declareVariable() {
@@ -335,7 +424,7 @@ static uint8_t parseVariable(const char *errorMessage) {
 
   if (current->scopeDepth > 0) {
     // Return a dummy index for local variables (since they don't have an index
-    // in the constant pool)
+    // in the constant table)
     return 0;
   }
 
@@ -398,7 +487,7 @@ static void and_(bool canAssign) {
   patchJump(endJump);
 }
 
-// @brief Compiles the right operand of a binary expression.
+/// @brief Compiles the right operand of a binary expression.
 static void binary(bool canAssign) {
   // Remember the (infix) operator
   TokenType operatorType = parser.previous.type;
@@ -478,13 +567,16 @@ static void literal(bool canAssign) {
   }
 }
 
-// Does not emit any bytecode. Its sole purpose is to recursively call
-// `expression()` (which emits bytecode) and consume the closing parenthesis.
+/// @brief Compiles a grouping expression.
+///
+/// Does not emit any bytecode. Its sole purpose is to recursively call
+/// `expression()` (which emits bytecode) and consume the closing parenthesis.
 static void grouping(bool canAssign) {
   expression();
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
+/// @brief Compiles a number literal expression.
 static void number(bool canAssign) {
   double value = strtod(parser.previous.start, NULL);
   emitConstant(NUMBER_VAL(value));
@@ -504,12 +596,16 @@ static void or_(bool canAssign) {
   patchJump(endJump);
 }
 
+/// @brief Compiles a string literal expression.
 static void string(bool canAssign) {
   // -1 to exclude the opening quote; -2 to exclude the closing quote
   emitConstant(OBJ_VAL(
       copyString(parser.previous.start + 1, parser.previous.length - 2)));
 }
 
+/// @brief Compiles a named variable expression.
+/// @param name The token representing the variable name
+/// @param canAssign Whether the variable is being assigned to
 static void namedVariable(Token name, bool canAssign) {
   uint8_t getOp, setOp;
 
@@ -518,6 +614,9 @@ static void namedVariable(Token name, bool canAssign) {
   if (arg != -1) {
     getOp = OP_GET_LOCAL;
     setOp = OP_SET_LOCAL;
+  } else if ((arg = resolveUpvalue(current, &name)) != -1) {
+    getOp = OP_GET_UPVALUE;
+    setOp = OP_SET_UPVALUE;
   } else {
     arg = identifierConstant(&name);
 
@@ -536,6 +635,7 @@ static void namedVariable(Token name, bool canAssign) {
   }
 }
 
+/// @brief Compiles a variable expression.
 static void variable(bool canAssign) {
   namedVariable(parser.previous, canAssign);
 }
@@ -656,13 +756,13 @@ static void block() {
   consume(TOKEN_RIGHT_BRACE, "Expect \"}\" after block.");
 }
 
-/// @brief Compiles a function, which has the following syntax:
+/// @brief Compiles a function (closure), which has the following syntax:
 /// ```lox
 /// fun functionName(parameters) body
 /// ```
-/// @param type The type of function being compiled
+/// @param type The type of closure being compiled
 ///
-/// The resulting function object is left on top of the stack as a value.
+/// The resulting closure object is left on top of the stack as a value.
 static void function(FunctionType type) {
   // Create a new compiler for the function being compiled
   Compiler compiler;
@@ -695,7 +795,13 @@ static void function(FunctionType type) {
 
   // Create the function object
   ObjFunction *function = endCompiler();
-  emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+  emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+
+  // Emit captured upvalues as operands to the closure instruction
+  for (int i = 0; i < function->upvalueCount; i++) {
+    emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+    emitByte(compiler.upvalues[i].index);
+  }
 }
 
 /// @brief Compiles a function declaration, which has the following syntax:

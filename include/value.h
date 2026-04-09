@@ -12,7 +12,9 @@ typedef enum {
   VAL_BOOL,
   VAL_NIL,
   VAL_NUMBER,
-  VAL_OBJ // heap-allocated types (memory managed)
+
+  // Heap-allocated types (memory managed)
+  VAL_OBJ
 } ValueType;
 
 typedef struct {
@@ -20,7 +22,9 @@ typedef struct {
   union {
     bool boolean;
     double number;
-    Obj *obj; // pointer to heap-allocated object
+
+    // Pointer to heap-allocated object
+    Obj *obj;
   } as;
 } Value;
 

@@ -10,7 +10,7 @@
 #define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 
 typedef struct {
-  ObjFunction *function;
+  ObjClosure *closure;
   uint8_t *ip;
   Value *slots;
 } CallFrame;
@@ -22,10 +22,17 @@ typedef struct {
   Value stack[STACK_MAX];
   Value *stackTop;
 
-  Table globals; // Global variables
-  Table strings; // String interning
+  // Global variables
+  Table globals;
 
-  Obj *objects; // Pointer to the head of the linked list
+  // String interning
+  Table strings;
+
+  // Head of the linked list of open upvalues pointing to variables on the stack
+  ObjUpvalue *openUpvalues;
+
+  // Pointer to the head of the linked list
+  Obj *objects;
 } VM;
 
 typedef enum {

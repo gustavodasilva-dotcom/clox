@@ -7,10 +7,12 @@
 
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
 
+#define IS_CLOSURE(value) isObjType(value, OBJ_CLOSURE)
 #define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
 #define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
 #define IS_STRING(value) isObjType(value, OBJ_STRING)
 
+#define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 #define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value))->function)
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
@@ -18,9 +20,11 @@
 
 // The heap-allocated object types.
 typedef enum {
+  OBJ_CLOSURE,
   OBJ_FUNCTION,
   OBJ_NATIVE,
   OBJ_STRING,
+  OBJ_UPVALUE
 } ObjType;
 
 // Base struct for all heap-allocated objects.
@@ -38,6 +42,8 @@ typedef struct {
 
   // Number of parameters
   int arity;
+
+  int upvalueCount;
 
   Chunk chunk;
   ObjString *name;
@@ -65,6 +71,37 @@ struct ObjString {
   uint32_t hash;
 };
 
+// An upvalue object.
+typedef struct ObjUpvalue {
+  // Obj header; align with Obj for easy casting
+  Obj obj;
+
+  Value *location;
+
+  // When the upvalue is closed, the closed-over value is stored here, and
+  // 'location' points to this instead of the stack
+  Value closed;
+
+  // List of open upvalues pointing to variables on the stack
+  struct ObjUpvalue *next;
+} ObjUpvalue;
+
+// A closure object.
+typedef struct {
+  // Obj header; align with Obj for easy casting
+  Obj obj;
+
+  ObjFunction *function;
+
+  ObjUpvalue **upvalues;
+  int upvalueCount;
+} ObjClosure;
+
+/// @brief Allocates a new closure object on the heap.
+/// @param function The function to wrap in the closure
+/// @return A pointer to the heap-allocated closure object
+ObjClosure *newClosure(ObjFunction *function);
+
 /// @brief Allocates a new function object on the heap.
 /// @return A pointer to the heap-allocated function object
 ObjFunction *newFunction();
@@ -86,6 +123,13 @@ ObjString *takeString(char *chars, int length);
 /// @return A pointer to the heap-allocated string object
 ObjString *copyString(const char *chars, int length);
 
+/// @brief Allocates a new upvalue object on the heap.
+/// @param slot A pointer to the variable being captured
+/// @return A pointer to the heap-allocated upvalue object
+ObjUpvalue *newUpvalue(Value *slot);
+
+/// @brief Prints a heap-allocated object to standard output.
+/// @param value The object to print
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {

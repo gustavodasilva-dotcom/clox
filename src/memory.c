@@ -23,6 +23,16 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
 
 static void freeObject(Obj *object) {
   switch (object->type) {
+  case OBJ_CLOSURE: {
+    // Free the upvalue array of the closure object
+    ObjClosure *closure = (ObjClosure *)object;
+    FREE_ARRAY(ObjUpvalue *, closure->upvalues, closure->upvalueCount);
+
+    // Free the closure object itself, but not the function it wraps
+    FREE(ObjClosure, object);
+    break;
+  }
+
   case OBJ_FUNCTION: {
     ObjFunction *function = (ObjFunction *)object;
 
@@ -34,9 +44,10 @@ static void freeObject(Obj *object) {
     break;
   }
 
-  case OBJ_NATIVE:
+  case OBJ_NATIVE: {
     FREE(ObjNative, object);
     break;
+  }
 
   case OBJ_STRING: {
     ObjString *string = (ObjString *)object;
@@ -48,6 +59,12 @@ static void freeObject(Obj *object) {
     FREE(ObjString, object);
     break;
   }
+
+  case OBJ_UPVALUE:
+    // Free the upvalue object itself, but not the closed-over variable it
+    // references
+    FREE(ObjUpvalue, object);
+    break;
   }
 }
 
