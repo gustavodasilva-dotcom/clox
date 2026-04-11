@@ -31,8 +31,18 @@ typedef struct {
   // Head of the linked list of open upvalues pointing to variables on the stack
   ObjUpvalue *openUpvalues;
 
+  // Total number of bytes currently allocated
+  size_t bytesAllocated;
+  // Threshold to trigger the next GC cycle
+  size_t nextGC;
+
   // Pointer to the head of the linked list
   Obj *objects;
+
+  int grayCount;
+  int grayCapacity;
+  // Stack of gray objects to trace during GC
+  Obj **grayStack;
 } VM;
 
 typedef enum {

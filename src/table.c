@@ -194,3 +194,27 @@ ObjString *tableFindString(Table *table, const char *chars, int length,
     index = (index + 1) % table->capacity;
   }
 }
+
+void tableRemoveWhite(Table *table) {
+  for (int i = 0; i < table->capacity; i++) {
+    Entry *entry = &table->entries[i];
+
+    // If the entry is non-empty and the key is not marked, remove it from the
+    // table
+    if (entry->key != NULL && !entry->key->obj.isMarked) {
+      tableDelete(table, entry->key);
+    }
+  }
+}
+
+void markTable(Table *table) {
+  for (int i = 0; i < table->capacity; i++) {
+    Entry *entry = &table->entries[i];
+
+    // Mark the key (string objects are heap-allocated)
+    markObject((Obj *)entry->key);
+
+    // Mark the value (which may be a heap-allocated object)
+    markValue(entry->value);
+  }
+}

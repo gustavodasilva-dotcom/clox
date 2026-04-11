@@ -6,4 +6,7 @@
 
 ObjFunction *compile(const char *source);
 
+/// @brief Marks the compiler's root objects as reachable during GC.
+void markCompilerRoots();
+
 #endif

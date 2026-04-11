@@ -18,7 +18,27 @@
 #define FREE_ARRAY(type, pointer, oldCount)                                    \
   reallocate(pointer, sizeof(type) * (oldCount), 0)
 
+/// @brief Reallocate memory for an object.
+/// @param pointer Pointer to the existing memory block
+/// @param oldSize Size of the existing memory block
+/// @param newSize Size of the new memory block
+/// @return Pointer to the reallocated memory block
+///
+/// This function handles memory allocation, deallocation, and resizing.
 void *reallocate(void *pointer, size_t oldSize, size_t newSize);
+
+/// @brief Marks an object as reachable.
+/// @param object The object to mark
+void markObject(Obj *object);
+
+/// @brief Marks a value as reachable.
+/// @param value The value to mark
+void markValue(Value value);
+
+/// @brief Collect garbage and free unused memory.
+void collectGarbage();
+
+/// @brief Free all heap-allocated objects.
 void freeObjects();
 
 #endif

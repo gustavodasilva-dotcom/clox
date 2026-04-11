@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "compiler.h"
+#include "memory.h"
 #include "scanner.h"
 
 typedef struct {
@@ -1114,4 +1115,16 @@ ObjFunction *compile(const char *source) {
   ObjFunction *function = endCompiler();
 
   return parser.hadError ? NULL : function;
+}
+
+void markCompilerRoots() {
+  Compiler *compiler = current;
+
+  while (compiler != NULL) {
+    // Mark the function object being compiled into as a GC root
+    markObject((Obj *)compiler->function);
+
+    // Mark any nested enclosing functions as GC roots
+    compiler = compiler->enclosing;
+  }
 }

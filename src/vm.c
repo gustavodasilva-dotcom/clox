@@ -222,9 +222,11 @@ static bool isFalsey(Value value) {
 }
 
 static void concatenate() {
-  // Pop operands
-  ObjString *b = AS_STRING(pop());
-  ObjString *a = AS_STRING(pop());
+  // Get the two strings to concatenate from the top of the stack (without
+  // popping them, to prevent them from being collected by GC during
+  // concatenation)
+  ObjString *b = AS_STRING(peek(0));
+  ObjString *a = AS_STRING(peek(1));
 
   // Get length of concatenated string
   int length = a->length + b->length;
@@ -244,6 +246,10 @@ static void concatenate() {
   // Create concatenated heap-allocated object
   ObjString *result = takeString(chars, length);
 
+  // Pop the two strings from the stack
+  pop();
+  pop();
+
   // Push result
   push(OBJ_VAL(result));
 }
@@ -253,6 +259,14 @@ void initVM() {
 
   // When the VM starts, there are no heap-allocated objects
   vm.objects = NULL;
+
+  vm.bytesAllocated = 0;
+  // 1 MB initial threshold for GC
+  vm.nextGC = 1024 * 1024;
+
+  vm.grayCount = 0;
+  vm.grayCapacity = 0;
+  vm.grayStack = NULL;
 
   initTable(&vm.globals);
   initTable(&vm.strings);

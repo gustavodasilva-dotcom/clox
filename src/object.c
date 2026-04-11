@@ -17,11 +17,18 @@ static Obj *allocateObject(size_t size, ObjType type) {
   // Set type
   object->type = type;
 
+  // Initialize as unmarked (not yet determined to be reachable)
+  object->isMarked = false;
+
   // Point the new object to the current head of the list
   object->next = vm.objects;
 
   // Update the head to point to the new object
   vm.objects = object;
+
+#ifdef DEBUG_LOG_GC
+  printf("%p allocate %ld for %d\n", (void *)object, size, type);
+#endif
 
   return object;
 }
@@ -70,8 +77,14 @@ static ObjString *allocateString(char *chars, int length, uint32_t hash) {
   string->chars = chars;
   string->hash = hash;
 
+  // Push the string object onto the stack to ensure it's reachable during GC
+  push(OBJ_VAL(string));
+
   // Intern string
   tableSet(&vm.strings, string, NIL_VAL);
+
+  // Pop the string object from the stack after interning it
+  pop();
 
   return string;
 }

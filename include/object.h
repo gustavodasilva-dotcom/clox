@@ -31,6 +31,9 @@ typedef enum {
 struct Obj {
   ObjType type;
 
+  // Whether the object is marked as reachable during GC
+  bool isMarked;
+
   // Linked list of all heap-allocated objects
   struct Obj *next;
 };
