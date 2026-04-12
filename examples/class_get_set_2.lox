@@ -1,0 +1,9 @@
+class Car {}
+
+var car = Car();
+
+car.name = "Fusca 1300";
+car.year = 1970;
+
+print car.name;
+print car.year;

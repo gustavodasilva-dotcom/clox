@@ -1,0 +1,3 @@
+var obj = "not an instance";
+obj.field = "new property";
+print obj.field;

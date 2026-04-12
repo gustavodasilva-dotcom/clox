@@ -3,25 +3,32 @@
 
 #include "chunk.h"
 #include "common.h"
+#include "table.h"
 #include "value.h"
 
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
 
+#define IS_CLASS(value) isObjType(value, OBJ_CLASS)
 #define IS_CLOSURE(value) isObjType(value, OBJ_CLOSURE)
 #define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
+#define IS_INSTANCE(value) isObjType(value, OBJ_INSTANCE)
 #define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
 #define IS_STRING(value) isObjType(value, OBJ_STRING)
 
+#define AS_CLASS(value) ((ObjClass *)AS_OBJ(value))
 #define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
+#define AS_INSTANCE(value) ((ObjInstance *)AS_OBJ(value))
 #define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value))->function)
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)
 
 // The heap-allocated object types.
 typedef enum {
+  OBJ_CLASS,
   OBJ_CLOSURE,
   OBJ_FUNCTION,
+  OBJ_INSTANCE,
   OBJ_NATIVE,
   OBJ_STRING,
   OBJ_UPVALUE
@@ -100,6 +107,31 @@ typedef struct {
   int upvalueCount;
 } ObjClosure;
 
+// A class object.
+typedef struct {
+  // Obj header; align with Obj for easy casting
+  Obj obj;
+
+  ObjString *name;
+} ObjClass;
+
+// An instance object.
+typedef struct {
+  // Obj header; align with Obj for easy casting
+  Obj obj;
+
+  // Pointer to the class of the instance
+  ObjClass *klass;
+
+  // Instance fields
+  Table fields;
+} ObjInstance;
+
+/// @brief Allocates a new class object on the heap.
+/// @param name The name of the class
+/// @return A pointer to the heap-allocated class object
+ObjClass *newClass(ObjString *name);
+
 /// @brief Allocates a new closure object on the heap.
 /// @param function The function to wrap in the closure
 /// @return A pointer to the heap-allocated closure object
@@ -109,8 +141,17 @@ ObjClosure *newClosure(ObjFunction *function);
 /// @return A pointer to the heap-allocated function object
 ObjFunction *newFunction();
 
+/// @brief Allocates a new instance object on the heap.
+/// @param klass The class of the instance
+/// @return A pointer to the heap-allocated instance object
+///
+/// The fields of an instance are added at runtime, so the instance is
+/// initialized with an empty fields hash table.
+ObjInstance *newInstance(ObjClass *klass);
+
 /// @brief Allocates a new native function object on the heap.
-/// @param function The C function to call when the native function is called
+/// @param function The C function to call when the native function is
+/// called
 /// @return A pointer to the heap-allocated native function object
 ObjNative *newNative(NativeFn function);
 

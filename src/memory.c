@@ -114,6 +114,14 @@ static void blackenObject(Obj *object) {
 #endif
 
   switch (object->type) {
+  case OBJ_CLASS: {
+    ObjClass *klass = (ObjClass *)object;
+
+    // Mark the class name as a GC root
+    markObject((Obj *)klass->name);
+    break;
+  }
+
   case OBJ_CLOSURE: {
     ObjClosure *closure = (ObjClosure *)object;
 
@@ -138,6 +146,17 @@ static void blackenObject(Obj *object) {
     break;
   }
 
+  case OBJ_INSTANCE: {
+    ObjInstance *instance = (ObjInstance *)object;
+
+    // Mark the instance's class as a GC root
+    markObject((Obj *)instance->klass);
+
+    // Mark the instance's fields as GC roots
+    markTable(&instance->fields);
+    break;
+  }
+
   case OBJ_UPVALUE:
     markValue(((ObjUpvalue *)object)->closed);
     break;
@@ -154,6 +173,11 @@ static void freeObject(Obj *object) {
 #endif
 
   switch (object->type) {
+  case OBJ_CLASS: {
+    FREE(ObjClass, object);
+    break;
+  }
+
   case OBJ_CLOSURE: {
     // Free the upvalue array of the closure object
     ObjClosure *closure = (ObjClosure *)object;
@@ -175,10 +199,20 @@ static void freeObject(Obj *object) {
     break;
   }
 
-  case OBJ_NATIVE: {
-    FREE(ObjNative, object);
+  case OBJ_INSTANCE: {
+    ObjInstance *instance = (ObjInstance *)object;
+
+    // Free the instance's fields hash table
+    freeTable(&instance->fields);
+
+    // Free the instance object itself, but not the class it references
+    FREE(ObjInstance, object);
     break;
   }
+
+  case OBJ_NATIVE:
+    FREE(ObjNative, object);
+    break;
 
   case OBJ_STRING: {
     ObjString *string = (ObjString *)object;
