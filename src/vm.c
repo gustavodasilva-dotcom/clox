@@ -126,11 +126,34 @@ static bool call(ObjClosure *closure, int argCount) {
 static bool callValue(Value callee, int argCount) {
   if (IS_OBJ(callee)) {
     switch (OBJ_TYPE(callee)) {
+    case OBJ_BOUND_METHOD: {
+      ObjBoundMethod *bound = AS_BOUND_METHOD(callee);
+
+      // Set the slot zero of the call frame (the "this" slot) to the method's
+      // receiver
+      vm.stackTop[-argCount - 1] = bound->receiver;
+
+      return call(bound->method, argCount);
+    }
+
     case OBJ_CLASS: {
       ObjClass *klass = AS_CLASS(callee);
 
       // Overwrite the callee on the stack with the new instance
       vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
+
+      Value initializer;
+      if (tableGet(&klass->methods, vm.initString, &initializer)) {
+        // If the class has an initializer method, call it automatically after
+        // creating the instance
+        return call(AS_CLOSURE(initializer), argCount);
+      } else if (argCount != 0) {
+        // Otherswise, if the class doesn't have an initializer method, it
+        // shouldn't be called with any arguments
+        runtimeError("Expected 0 arguments but got %d.", argCount);
+        return false;
+      }
+
       return true;
     }
 
@@ -162,6 +185,32 @@ static bool callValue(Value callee, int argCount) {
   runtimeError("Can only call functions and classes.");
 
   return false;
+}
+
+/// @brief Binds a method to an instance.
+/// @param klass The class to which the method belongs
+/// @param name The name of the method
+/// @return `true` if the method was found and bound, `false` otherwise
+///
+/// If a method with the given name is found in the class, it replaces the
+/// instance on the stack with a new bound method object.
+static bool bindMethod(ObjClass *klass, ObjString *name) {
+  Value method;
+  if (!tableGet(&klass->methods, name, &method)) {
+    runtimeError("Undefined property \"%s\".", name->chars);
+    return false;
+  }
+
+  // The instance is on top of the stack
+  ObjBoundMethod *bound = newBoundMethod(peek(0), AS_CLOSURE(method));
+
+  // Pop instance
+  pop();
+
+  // Push bound method
+  push(OBJ_VAL(bound));
+
+  return true;
 }
 
 /// @brief Captures an upvalue from the current function's stack.
@@ -222,6 +271,27 @@ static void closeUpvalue(Value *last) {
   }
 }
 
+/// @brief Defines a method on a class.
+/// @param name The name of the method
+///
+/// After adding the method to the class's methods hash table, the class object
+/// is left on the stack as the receiver of the next method definition, so that
+/// multiple methods can be defined in a row without having to reload the class
+/// object onto the stack.
+static void defineMethod(ObjString *name) {
+  // The closure method is on top of the stack
+  Value method = peek(0);
+
+  // The class is below the method on the stack
+  ObjClass *klass = AS_CLASS(peek(1));
+
+  // Define the method in the class's methods hash table
+  tableSet(&klass->methods, name, method);
+
+  // Pop the closure method from the stack
+  pop();
+}
+
 /// @brief Determines if a value is falsey.
 /// @param value The value to check
 /// @return `true` if the value is falsey, `false` otherwise
@@ -279,12 +349,21 @@ void initVM() {
   initTable(&vm.globals);
   initTable(&vm.strings);
 
+  // Initialize it as `NULL` first to avoid marking a non-initialized pointer
+  // during GC
+  vm.initString = NULL;
+  vm.initString = copyString("init", 4);
+
   defineNative("clock", clockNative);
 }
 
 void freeVM() {
   freeTable(&vm.globals);
   freeTable(&vm.strings);
+
+  // Set copied string to `NULL` before freeing it below
+  vm.initString = NULL;
+
   freeObjects();
 }
 
@@ -437,8 +516,12 @@ static InterpretResult run() {
         break;
       }
 
-      runtimeError("Undefined property \"%s\".", name->chars);
-      return INTERPRET_RUNTIME_ERROR;
+      // If the property is not found in the instance's fields, look for a
+      // method with the same name in the instance's class
+      if (!bindMethod(instance->klass, name)) {
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      break;
     }
 
     case OP_SET_PROPERTY: {
@@ -633,6 +716,10 @@ static InterpretResult run() {
 
     case OP_CLASS:
       push(OBJ_VAL(newClass(READ_STRING())));
+      break;
+
+    case OP_METHOD:
+      defineMethod(READ_STRING());
       break;
     }
   }

@@ -114,11 +114,25 @@ static void blackenObject(Obj *object) {
 #endif
 
   switch (object->type) {
+  case OBJ_BOUND_METHOD: {
+    ObjBoundMethod *bound = (ObjBoundMethod *)object;
+
+    // Mark the receiver as a GC root
+    markValue(bound->receiver);
+
+    // Mark the method closure as a GC root
+    markObject((Obj *)bound->method);
+    break;
+  }
+
   case OBJ_CLASS: {
     ObjClass *klass = (ObjClass *)object;
 
     // Mark the class name as a GC root
     markObject((Obj *)klass->name);
+
+    // Mark the class's methods as GC roots
+    markTable(&klass->methods);
     break;
   }
 
@@ -173,7 +187,16 @@ static void freeObject(Obj *object) {
 #endif
 
   switch (object->type) {
+  case OBJ_BOUND_METHOD:
+    FREE(ObjBoundMethod, object);
+    break;
+
   case OBJ_CLASS: {
+    ObjClass *klass = (ObjClass *)object;
+
+    // Free the class's methods hash table (owned by the class object)
+    freeTable(&klass->methods);
+
     FREE(ObjClass, object);
     break;
   }
@@ -259,6 +282,9 @@ static void markRoots() {
 
   // Mark values directly referenced by the compiler
   markCompilerRoots();
+
+  // Mark the pre-allocated string for the initializer method name of classes
+  markObject((Obj *)vm.initString);
 }
 
 /// @brief Traces the references of gray objects, marking any reachable objects

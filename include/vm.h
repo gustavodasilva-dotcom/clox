@@ -28,6 +28,10 @@ typedef struct {
   // String interning
   Table strings;
 
+  // Pre-allocated string for the initializer method name of classes, `init`
+  // (which is an interned string)
+  ObjString *initString;
+
   // Head of the linked list of open upvalues pointing to variables on the stack
   ObjUpvalue *openUpvalues;
 

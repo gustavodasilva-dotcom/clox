@@ -51,8 +51,24 @@ typedef struct {
   bool isLocal;
 } Upvalue;
 
-typedef enum { TYPE_FUNCTION, TYPE_SCRIPT } FunctionType;
+typedef enum {
+  // A function defined by the user
+  TYPE_FUNCTION,
 
+  // The initializer method of a class, which is called when an instance of the
+  // class is created
+  TYPE_INITIALIZER,
+
+  // A method defined in a class
+  TYPE_METHOD,
+
+  // The top-level code outside of any function is compiled as an anonymous
+  // function
+  TYPE_SCRIPT
+} FunctionType;
+
+// Represents a function being compiled, which is needed to compile nested
+// functions.
 typedef struct Compiler {
   struct Compiler *enclosing;
   ObjFunction *function;
@@ -69,9 +85,22 @@ typedef struct Compiler {
   int scopeDepth;
 } Compiler;
 
+// Represents a class being compiled, which is needed to compile method bodies.
+typedef struct ClassCompiler {
+  // The enclosing class, if any
+  struct ClassCompiler *enclosing;
+
+  // The name of the class being compiled
+  Token name;
+} ClassCompiler;
+
 Parser parser;
 
 Compiler *current = NULL;
+
+// The current, innermost class being compiled, or `NULL` if not compiling a
+// class
+ClassCompiler *currentClass = NULL;
 
 Chunk *compilingChunk;
 
@@ -184,8 +213,17 @@ static int emitJump(uint8_t instruction) {
 }
 
 /// @brief Emits bytecode to return from the current function.
+///
+/// This function is called when a return statement without an
+/// expression being returned is compiled.
 static void emitReturn() {
-  emitByte(OP_NIL);
+  if (current->type == TYPE_INITIALIZER) {
+    // Implicitly return `this` from initializer methods
+    emitBytes(OP_GET_LOCAL, 0);
+  } else {
+    emitByte(OP_NIL);
+  }
+
   emitByte(OP_RETURN);
 }
 
@@ -236,8 +274,15 @@ static void initCompiler(Compiler *compiler, FunctionType type) {
   Local *local = &current->locals[current->localCount++];
   local->depth = 0;
   local->isCaptured = false;
-  local->name.start = "";
-  local->name.length = 0;
+
+  // Class methods have an implicit "this" variable in slot 0
+  if (type != TYPE_FUNCTION) {
+    local->name.start = "this";
+    local->name.length = 4;
+  } else {
+    local->name.start = "";
+    local->name.length = 0;
+  }
 }
 
 static ObjFunction *endCompiler() {
@@ -659,6 +704,17 @@ static void variable(bool canAssign) {
   namedVariable(parser.previous, canAssign);
 }
 
+/// @brief Compiles a `this` expression.
+static void this_(bool canAssign) {
+  // Prevent using `this` outside of class methods
+  if (currentClass == NULL) {
+    error("Can't call \"this\" outside of a class.");
+    return;
+  }
+
+  variable(false);
+}
+
 // The order of stack operands is reversed (Polish notation). So, first the
 // operand is compiled. Then, if the operator (which was previously consumed) is
 // a minus sign, the `OP_NEGATE` bytecode is emitted.
@@ -717,7 +773,7 @@ ParseRule rules[] = {
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
-    [TOKEN_THIS] = {NULL, NULL, PREC_NONE},
+    [TOKEN_THIS] = {this_, NULL, PREC_NONE},
     [TOKEN_TRUE] = {literal, NULL, PREC_NONE},
     [TOKEN_VAR] = {NULL, NULL, PREC_NONE},
     [TOKEN_WHILE] = {NULL, NULL, PREC_NONE},
@@ -823,6 +879,33 @@ static void function(FunctionType type) {
   }
 }
 
+/// @brief Compiles a method declaration, which has the following syntax:
+/// ```lox
+/// methodName(parameters) body
+/// ```
+static void method() {
+  consume(TOKEN_IDENTIFIER, "Expect method name.");
+
+  // Add the method name to the constant table
+  uint8_t constant = identifierConstant(&parser.previous);
+
+  FunctionType type = TYPE_METHOD;
+
+  // Check if the method is an class initializer, which has the special name
+  // `init`
+  if (parser.previous.length == 4 &&
+      memcmp(parser.previous.start, "init", 4) == 0) {
+    type = TYPE_INITIALIZER;
+  }
+
+  // Compile the method body as a function, and leave the resulting closure on
+  // top of the stack
+  function(type);
+
+  // Emit the method instruction with the method name operand
+  emitBytes(OP_METHOD, constant);
+}
+
 /// @brief Compiles a class declaration, which has the following syntax:
 /// ```lox
 /// class ClassName { body }
@@ -830,8 +913,17 @@ static void function(FunctionType type) {
 static void classDeclaration() {
   consume(TOKEN_IDENTIFIER, "Expect class name.");
 
+  // Store the class name token for later use
+  Token className = parser.previous;
+
   uint8_t nameConstant = identifierConstant(&parser.previous);
   declareVariable();
+
+  // Create a new compiler for the class being compiled
+  ClassCompiler classCompiler;
+  classCompiler.name = parser.previous;
+  classCompiler.enclosing = currentClass;
+  currentClass = &classCompiler;
 
   emitBytes(OP_CLASS, nameConstant);
 
@@ -839,8 +931,24 @@ static void classDeclaration() {
   // methods
   defineVariable(nameConstant);
 
+  // Load the class name onto the stack to be used as the receiver of method
+  // definitions
+  namedVariable(className, false);
+
   consume(TOKEN_LEFT_BRACE, "Expect \"{\" before class body.");
+
+  // Compile methods
+  while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+    method();
+  }
+
   consume(TOKEN_RIGHT_BRACE, "Expect \"}\" after class body.");
+
+  // Pop the class name from the stack, since it's no longer needed
+  emitByte(OP_POP);
+
+  // Restore the enclosing class, if any (otherwise, set to `NULL`)
+  currentClass = currentClass->enclosing;
 }
 
 /// @brief Compiles a function declaration, which has the following syntax:
@@ -910,6 +1018,10 @@ static void returnStatement() {
     // No return value, so emit bytecode to return nil
     emitReturn();
   } else {
+    if (current->type == TYPE_INITIALIZER) {
+      error("Can't return a value from an initializer.");
+    }
+
     // Compile return value (push onto stack)
     expression();
 
