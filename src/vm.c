@@ -187,6 +187,45 @@ static bool callValue(Value callee, int argCount) {
   return false;
 }
 
+/// @brief Invokes a method on a class.
+/// @param klass The class on which to invoke the method
+/// @param name The name of the method to invoke
+/// @param argCount The number of arguments to pass to the method
+/// @return `true` if the invocation was successful, `false` otherwise
+static bool invokeFromClass(ObjClass *klass, ObjString *name, int argCount) {
+  Value method;
+  if (!tableGet(&klass->methods, name, &method)) {
+    runtimeError("Undefined property \"%s\".", name->chars);
+    return false;
+  }
+
+  return call(AS_CLOSURE(method), argCount);
+}
+
+/// @brief Invokes a method on an instance.
+/// @param name The name of the method to invoke
+/// @param argCount The number of arguments to pass to the method
+/// @return `true` if the invocation was successful, `false` otherwise
+static bool invoke(ObjString *name, int argCount) {
+  // The receiver of the method is below the arguments on the stack
+  Value receiver = peek(argCount);
+
+  ObjInstance *instance = AS_INSTANCE(receiver);
+
+  // Look for the method in the instance's fields first, to allow for method
+  // overrides on a per-instance basis
+  Value value;
+  if (tableGet(&instance->fields, name, &value)) {
+    // Set the slot zero of the call frame (the "this" slot) to the instance
+    vm.stackTop[-argCount - 1] = value;
+
+    // Call the method closure
+    return callValue(value, argCount);
+  }
+
+  return invokeFromClass(instance->klass, name, argCount);
+}
+
 /// @brief Binds a method to an instance.
 /// @param klass The class to which the method belongs
 /// @param name The name of the method
@@ -637,6 +676,20 @@ static InterpretResult run() {
       int argCount = READ_BYTE();
 
       if (!callValue(peek(argCount), argCount)) {
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      // Update the current call frame to the callee's
+      frame = &vm.frames[vm.frameCount - 1];
+      break;
+    }
+
+    case OP_INVOKE: {
+      // Read the operands: method name and argument count
+      ObjString *method = READ_STRING();
+      int argCount = READ_BYTE();
+
+      if (!invoke(method, argCount)) {
         return INTERPRET_RUNTIME_ERROR;
       }
 

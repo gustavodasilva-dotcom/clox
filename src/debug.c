@@ -58,6 +58,20 @@ static int constantInstruction(const char *name, Chunk *chunk, int offset) {
   return offset + 2;
 }
 
+static int invokeInstruction(const char *name, Chunk *chunk, int offset) {
+  uint8_t constant = chunk->code[offset + 1];
+  uint8_t argCount = chunk->code[offset + 2];
+
+  // Print the instruction name, the constant index operand, the argument count
+  // operand, and the value of the constant at the index
+  printf("%-16s (%d args) %4d '", name, argCount, constant);
+  printValue(chunk->constants.values[constant]);
+  printf("\n");
+
+  // Return offset by 3 (opcode + constant operand + argument count operand)
+  return offset + 3;
+}
+
 int disassembleInstruction(Chunk *chunk, int offset) {
   printf("%04d ", offset);
 
@@ -130,6 +144,8 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     return jumpInstruction("OP_LOOP", -1, chunk, offset);
   case OP_CALL:
     return byteInstruction("OP_CALL", chunk, offset);
+  case OP_INVOKE:
+    return invokeInstruction("OP_INVOKE", chunk, offset);
   case OP_CLOSURE: {
     // Increment offset to get the constant index operand
     offset++;

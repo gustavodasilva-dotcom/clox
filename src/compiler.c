@@ -606,6 +606,14 @@ static void dot(bool canAssign) {
 
     // Emit the setter instruction with the property name operand
     emitBytes(OP_SET_PROPERTY, name);
+  } else if (match(TOKEN_LEFT_PAREN)) {
+    // Compile the argument list (push them onto the stack)
+    uint8_t argCount = argumentList();
+
+    // Emit the method call superinstruction with the property name and
+    // argument count operands
+    emitBytes(OP_INVOKE, name);
+    emitByte(argCount);
   } else {
     // Emit the getter instruction with the property name operand
     emitBytes(OP_GET_PROPERTY, name);
