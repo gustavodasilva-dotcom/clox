@@ -1,0 +1,61 @@
+class Zoo {
+	init() {
+		this.aardvark = 1;
+		this.baboon = 1;
+		this.balineseJavaneseCat = 1;
+		this.donkey = 1;
+		this.elephant = 1;
+		this.fox = 1;
+		this.mountainGorilla = 1;
+		this.capybara = 1;
+		this.bear = 1;
+		this.chileanFlamingo = 1;
+		this.ostrich = 1;
+		this.penguin = 1;
+		this.meerkat = 1;
+		this.okapi = 1;
+		this.sloth = 1;
+	}
+	ant() { return this.aardvark; }
+	banana() { return this.baboon; }
+	tuna() { return this.balineseJavaneseCat; }
+	hay() { return this.donkey; }
+	grass() { return this.elephant; }
+	mouse() { return this.fox; }
+	leave() { return this.mountainGorilla; }
+	mulberryBark() { return this.capybara; }
+	berry() { return this.bear; }
+	algae() { return this.chileanFlamingo; }
+	succulents() { return this.ostrich; }
+	squid() { return this.penguin; }
+	spider() { return this.meerkat; }
+	bud() { return this.okapi; }
+	fruit() { return this.sloth; }
+}
+
+var zoo = Zoo();
+
+var sum = 0;
+var start = clock();
+
+while (sum < 100000000) {
+	sum = sum + zoo.ant()
+		+ zoo.banana()
+		+ zoo.tuna()
+		+ zoo.hay()
+		+ zoo.grass()
+		+ zoo.mouse()
+		+ zoo.leave()
+		+ zoo.mulberryBark()
+		+ zoo.berry()
+		+ zoo.algae()
+		+ zoo.algae()
+		+ zoo.succulents()
+		+ zoo.squid()
+		+ zoo.spider()
+		+ zoo.bud()
+		+ zoo.fruit();
+}
+
+print clock() - start;
+print sum;

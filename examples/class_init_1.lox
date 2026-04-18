@@ -1,5 +1,0 @@
-class Brunch {
-	init(food, drink) {} // Optional
-}
-
-Brunch("eggs", "coffee");

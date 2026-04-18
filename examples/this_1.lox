@@ -1,7 +1,0 @@
-print this; // An error to use it at the top level
-
-fun notMethod() {
-	print this; // An error to use it in a function
-}
-
-notMethod();

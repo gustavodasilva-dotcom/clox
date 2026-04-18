@@ -11,18 +11,22 @@
 void initTable(Table *table) {
   // Table starts empty
   table->count = 0;
-  table->capacity = 0;
+
+  // -1 capacity to indicate that the table is empty (since capacity is used as
+  // a mask for hashing, it needs to be one less than a power of 2)
+  table->capacity = -1;
+
   table->entries = NULL;
 }
 
 void freeTable(Table *table) {
-  FREE_ARRAY(Entry, table->entries, table->capacity);
+  FREE_ARRAY(Entry, table->entries, table->capacity + 1);
   initTable(table);
 }
 
 static Entry *findEntry(Entry *entries, int capacity, ObjString *key) {
-  // Modulo the hash by the capacity to get the starting index
-  uint32_t index = key->hash % capacity;
+  // Get the starting index
+  uint32_t index = key->hash & capacity;
 
   Entry *tombstone = NULL;
 
@@ -45,15 +49,15 @@ static Entry *findEntry(Entry *entries, int capacity, ObjString *key) {
     }
 
     // It's a collision; keep probing
-    index = (index + 1) % capacity;
+    index = (index + 1) & capacity;
   }
 }
 
 static void adjustCapacity(Table *table, int capacity) {
   // Allocate space for the entries
-  Entry *entries = ALLOCATE(Entry, capacity);
+  Entry *entries = ALLOCATE(Entry, capacity + 1);
 
-  for (int i = 0; i < capacity; i++) {
+  for (int i = 0; i <= capacity; i++) {
     // Initialize the entries to empty
     entries[i].key = NULL;
     entries[i].value = NIL_VAL;
@@ -63,7 +67,7 @@ static void adjustCapacity(Table *table, int capacity) {
   table->count = 0;
 
   // Rebuild table
-  for (int i = 0; i < table->capacity; i++) {
+  for (int i = 0; i <= table->capacity; i++) {
     Entry *entry = &table->entries[i];
 
     if (entry->key == NULL) {
@@ -82,7 +86,7 @@ static void adjustCapacity(Table *table, int capacity) {
   }
 
   // Free the old bucket array
-  FREE_ARRAY(Entry, table->entries, table->capacity);
+  FREE_ARRAY(Entry, table->entries, table->capacity + 1);
 
   // And update the table with the new bucket array
   table->entries = entries;
@@ -111,9 +115,9 @@ bool tableGet(Table *table, ObjString *key, Value *value) {
 
 bool tableSet(Table *table, ObjString *key, Value value) {
   // Check if the table needs to grow
-  if (table->count + 1 > table->capacity * TABLE_MAX_LOAD) {
+  if (table->count + 1 > (table->capacity + 1) * TABLE_MAX_LOAD) {
     // If so, grow it
-    int capacity = GROW_CAPACITY(table->capacity);
+    int capacity = GROW_CAPACITY(table->capacity + 1) - 1;
     adjustCapacity(table, capacity);
   }
 
@@ -156,7 +160,7 @@ bool tableDelete(Table *table, ObjString *key) {
 }
 
 void tableAddAll(Table *from, Table *to) {
-  for (int i = 0; i < from->capacity; i++) {
+  for (int i = 0; i <= from->capacity; i++) {
     Entry *entry = &from->entries[i];
 
     if (entry->key != NULL) {
@@ -174,7 +178,7 @@ ObjString *tableFindString(Table *table, const char *chars, int length,
   }
 
   // Module the hash by the capacity to get the starting index
-  uint32_t index = hash % table->capacity;
+  uint32_t index = hash & table->capacity;
 
   for (;;) {
     Entry *entry = &table->entries[index];
@@ -191,12 +195,12 @@ ObjString *tableFindString(Table *table, const char *chars, int length,
     }
 
     // Keep probing
-    index = (index + 1) % table->capacity;
+    index = (index + 1) & table->capacity;
   }
 }
 
 void tableRemoveWhite(Table *table) {
-  for (int i = 0; i < table->capacity; i++) {
+  for (int i = 0; i <= table->capacity; i++) {
     Entry *entry = &table->entries[i];
 
     // If the entry is non-empty and the key is not marked, remove it from the
@@ -208,7 +212,7 @@ void tableRemoveWhite(Table *table) {
 }
 
 void markTable(Table *table) {
-  for (int i = 0; i < table->capacity; i++) {
+  for (int i = 0; i <= table->capacity; i++) {
     Entry *entry = &table->entries[i];
 
     // Mark the key (string objects are heap-allocated)
