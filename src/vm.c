@@ -585,6 +585,21 @@ static InterpretResult run() {
       break;
     }
 
+    case OP_GET_SUPER: {
+      // Look up method name operand from the constant table
+      ObjString *name = READ_STRING();
+
+      // Pop and get superclass on the stack (leaving the receiver on the stack
+      // for method binding)
+      ObjClass *superclass = AS_CLASS(pop());
+
+      // Try to bind the method to the superclass
+      if (!bindMethod(superclass, name)) {
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      break;
+    }
+
     case OP_EQUAL: {
       Value b = pop();
       Value a = pop();
@@ -770,6 +785,24 @@ static InterpretResult run() {
     case OP_CLASS:
       push(OBJ_VAL(newClass(READ_STRING())));
       break;
+
+    case OP_INHERIT: {
+      Value superclass = peek(1);
+
+      if (!IS_CLASS(superclass)) {
+        runtimeError("Superclass must be a class.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      ObjClass *subclass = AS_CLASS(peek(0));
+
+      // Add superclass's methods to subclass's methods
+      tableAddAll(&AS_CLASS(superclass)->methods, &subclass->methods);
+
+      // Pop subclass
+      pop();
+      break;
+    }
 
     case OP_METHOD:
       defineMethod(READ_STRING());

@@ -92,6 +92,10 @@ typedef struct ClassCompiler {
 
   // The name of the class being compiled
   Token name;
+
+  // Indicates whether the class being compiled has a superclass, which is
+  // needed to compile `super` expressions
+  bool hasSuperclass;
 } ClassCompiler;
 
 Parser parser;
@@ -678,6 +682,10 @@ static void string(bool canAssign) {
 /// @brief Compiles a named variable expression.
 /// @param name The token representing the variable name
 /// @param canAssign Whether the variable is being assigned to
+///
+/// The result of compiling a variable expression is either the variable's value
+/// being pushed onto the stack (for variable access) or bytecode being emitted
+/// to assign to the variable (for variable assignment).
 static void namedVariable(Token name, bool canAssign) {
   uint8_t getOp, setOp;
 
@@ -710,6 +718,48 @@ static void namedVariable(Token name, bool canAssign) {
 /// @brief Compiles a variable expression.
 static void variable(bool canAssign) {
   namedVariable(parser.previous, canAssign);
+}
+
+/// @brief Creates a synthetic token with the given text.
+/// @param text The text of the synthetic token
+/// @return The synthetic token
+///
+/// A synthetic token is a token that doesn't come from the source code, but is
+/// created programmatically.
+static Token syntheticToken(const char *text) {
+  Token token;
+  token.start = text;
+  token.length = (int)strlen(text);
+
+  return token;
+}
+
+/// @brief Compiles a `super` expression.
+///
+/// `super` expressions, internally, are compiled as a special kind of property
+/// access expression, so they are compiled similarly to `dot` expressions.
+static void super_(bool canAssign) {
+  if (currentClass == NULL) {
+    error("Can't use \"super\" outside of a class.");
+  } else if (!currentClass->hasSuperclass) {
+    error("Can't use \"super\" in a class with no superclass.");
+  }
+
+  consume(TOKEN_DOT, "Expect \".\" after \"super\".");
+  consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
+
+  // The name of the method being accessed is needed as an operand to the
+  // bytecode
+  uint8_t name = identifierConstant(&parser.previous);
+
+  // Load the current receiver onto the stack
+  namedVariable(syntheticToken("this"), false);
+
+  // Load the superclass onto the stack
+  namedVariable(syntheticToken("super"), false);
+
+  // Emit instruction with the method name as an operand
+  emitBytes(OP_GET_SUPER, name);
 }
 
 /// @brief Compiles a `this` expression.
@@ -780,7 +830,7 @@ ParseRule rules[] = {
     [TOKEN_OR] = {NULL, or_, PREC_OR},
     [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
-    [TOKEN_SUPER] = {NULL, NULL, PREC_NONE},
+    [TOKEN_SUPER] = {super_, NULL, PREC_NONE},
     [TOKEN_THIS] = {this_, NULL, PREC_NONE},
     [TOKEN_TRUE] = {literal, NULL, PREC_NONE},
     [TOKEN_VAR] = {NULL, NULL, PREC_NONE},
@@ -927,17 +977,46 @@ static void classDeclaration() {
   uint8_t nameConstant = identifierConstant(&parser.previous);
   declareVariable();
 
-  // Create a new compiler for the class being compiled
-  ClassCompiler classCompiler;
-  classCompiler.name = parser.previous;
-  classCompiler.enclosing = currentClass;
-  currentClass = &classCompiler;
-
   emitBytes(OP_CLASS, nameConstant);
 
   // Define the class name as a variable so that it can be referenced in its
   // methods
   defineVariable(nameConstant);
+
+  // Create a new compiler for the class being compiled
+  ClassCompiler classCompiler;
+  classCompiler.name = parser.previous;
+  classCompiler.hasSuperclass = false;
+  classCompiler.enclosing = currentClass;
+  currentClass = &classCompiler;
+
+  if (match(TOKEN_LESS)) {
+    consume(TOKEN_IDENTIFIER, "Expect superclass name.");
+
+    // Load the superclass onto the stack
+    variable(false);
+
+    // Check for inheritance cycles, which are not allowed
+    if (identifiersEqual(&className, &parser.previous)) {
+      error("A class can't inherit from itself.");
+    }
+
+    // Create a lexical scope for the subclass, ensuring that multiple classes
+    // declared in the same scope can have their own `super` variable
+    beginScope();
+    addLocal(syntheticToken("super"));
+    defineVariable(0);
+
+    // Load the subclass inheriting from the superclass onto the stack
+    namedVariable(className, false);
+
+    // Emit the inheritance instruction, which will create the subclass and bind
+    // it to the superclass
+    emitByte(OP_INHERIT);
+
+    // Mark the current class as having a superclass
+    classCompiler.hasSuperclass = true;
+  }
 
   // Load the class name onto the stack to be used as the receiver of method
   // definitions
@@ -954,6 +1033,11 @@ static void classDeclaration() {
 
   // Pop the class name from the stack, since it's no longer needed
   emitByte(OP_POP);
+
+  if (classCompiler.hasSuperclass) {
+    // Close the subclass scope if it inherits from a superclass
+    endScope();
+  }
 
   // Restore the enclosing class, if any (otherwise, set to `NULL`)
   currentClass = currentClass->enclosing;
