@@ -755,11 +755,24 @@ static void super_(bool canAssign) {
   // Load the current receiver onto the stack
   namedVariable(syntheticToken("this"), false);
 
-  // Load the superclass onto the stack
-  namedVariable(syntheticToken("super"), false);
+  if (match(TOKEN_LEFT_PAREN)) {
+    // Compile the argument list (push them onto the stack)
+    uint8_t argCount = argumentList();
 
-  // Emit instruction with the method name as an operand
-  emitBytes(OP_GET_SUPER, name);
+    // Load the superclass onto the stack
+    namedVariable(syntheticToken("super"), false);
+
+    // Emit the super method call superinstruction with the method name and
+    // argument count as operands
+    emitBytes(OP_SUPER_INVOKE, name);
+    emitByte(argCount);
+  } else {
+    // Load the superclass onto the stack
+    namedVariable(syntheticToken("super"), false);
+
+    // Emit the method access instruction with the method name as an operand
+    emitBytes(OP_GET_SUPER, name);
+  }
 }
 
 /// @brief Compiles a `this` expression.

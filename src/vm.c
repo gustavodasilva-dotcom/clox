@@ -713,6 +713,23 @@ static InterpretResult run() {
       break;
     }
 
+    case OP_SUPER_INVOKE: {
+      // Read the operands: method name and argument count
+      ObjString *method = READ_STRING();
+      int argCount = READ_BYTE();
+
+      // Pop and get superclass on the stack
+      ObjClass *superclass = AS_CLASS(pop());
+
+      if (!invokeFromClass(superclass, method, argCount)) {
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      // Update the current call frame to the callee's
+      frame = &vm.frames[vm.frameCount - 1];
+      break;
+    }
+
     case OP_CLOSURE: {
       // Read function from the constant table
       ObjFunction *function = AS_FUNCTION(READ_CONSTANT());
