@@ -57,5 +57,5 @@ while (sum < 100000000) {
 		+ zoo.fruit();
 }
 
-print clock() - start;
-print sum;
+print(clock() - start);
+print(sum);

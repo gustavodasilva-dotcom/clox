@@ -12,6 +12,17 @@
 
 VM vm;
 
+/// @brief Implements the native `print` function, which prints its argument to
+/// the console.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @return `nil`
+static Value printNative(int argCount, Value *args) {
+  printValue(args[0]);
+  printf("\n");
+  return NIL_VAL;
+}
+
 /// @brief Implements the native `clock` function.
 /// @param argCount The number of arguments passed to the function
 /// @param args A pointer to the first argument on the stack
@@ -66,12 +77,13 @@ static void runtimeError(const char *format, ...) {
 
 /// @brief Defines a native function in the global variables hash table.
 /// @param name The name of the native function
+/// @param arity The number of parameters the native function takes
 /// @param function A pointer to the native function
-static void defineNative(const char *name, NativeFn function) {
+static void defineNative(const char *name, int arity, NativeFn function) {
   // Push the native function's name and the native function itself onto the
   // stack
   push(OBJ_VAL(copyString(name, (int)strlen(name))));
-  push(OBJ_VAL(newNative(function)));
+  push(OBJ_VAL(newNative(arity, function)));
 
   // Define the native function in the global variables hash table
   tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
@@ -162,10 +174,16 @@ static bool callValue(Value callee, int argCount) {
 
     case OBJ_NATIVE: {
       // Cast the callee to a native function
-      NativeFn native = AS_NATIVE(callee);
+      ObjNative *native = AS_NATIVE(callee);
+
+      if (argCount != native->arity) {
+        runtimeError("Expected %d arguments but got %d.", native->arity,
+                     argCount);
+        return false;
+      }
 
       // Call the native function
-      Value result = native(argCount, vm.stackTop - argCount);
+      Value result = native->function(argCount, vm.stackTop - argCount);
 
       // Pop arguments and the callee from the stack
       vm.stackTop -= argCount + 1;
@@ -393,7 +411,8 @@ void initVM() {
   vm.initString = NULL;
   vm.initString = copyString("init", 4);
 
-  defineNative("clock", clockNative);
+  defineNative("print", 1, printNative);
+  defineNative("clock", 0, clockNative);
 }
 
 void freeVM() {
@@ -655,12 +674,6 @@ static InterpretResult run() {
 
       // Pop, negate, and push
       push(NUMBER_VAL(-AS_NUMBER(pop())));
-      break;
-    }
-
-    case OP_PRINT: {
-      printValue(pop());
-      printf("\n");
       break;
     }
 

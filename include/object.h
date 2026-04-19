@@ -21,7 +21,7 @@
 #define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 #define AS_INSTANCE(value) ((ObjInstance *)AS_OBJ(value))
-#define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value))->function)
+#define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value)))
 #define AS_STRING(value) ((ObjString *)AS_OBJ(value))
 #define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)
 
@@ -71,6 +71,10 @@ typedef struct {
   // Obj header; align with Obj for easy casting
   Obj obj;
 
+  // Number of parameters
+  int arity;
+
+  // Pointer to the C function to call when the native function is called
   NativeFn function;
 } ObjNative;
 
@@ -176,10 +180,11 @@ ObjFunction *newFunction();
 ObjInstance *newInstance(ObjClass *klass);
 
 /// @brief Allocates a new native function object on the heap.
+/// @param arity The number of parameters the native function takes
 /// @param function The C function to call when the native function is
 /// called
 /// @return A pointer to the heap-allocated native function object
-ObjNative *newNative(NativeFn function);
+ObjNative *newNative(int arity, NativeFn function);
 
 /// @brief Allocates a new string object on the heap.
 /// @param chars The string
