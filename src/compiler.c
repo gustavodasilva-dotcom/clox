@@ -841,7 +841,6 @@ ParseRule rules[] = {
     [TOKEN_IF] = {NULL, NULL, PREC_NONE},
     [TOKEN_NIL] = {literal, NULL, PREC_NONE},
     [TOKEN_OR] = {NULL, or_, PREC_OR},
-    [TOKEN_PRINT] = {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN] = {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER] = {super_, NULL, PREC_NONE},
     [TOKEN_THIS] = {this_, NULL, PREC_NONE},
@@ -1095,20 +1094,6 @@ static void varDeclaration() {
   defineVariable(global);
 }
 
-/// @brief Compiles a print statement, which has the following syntax:
-/// ```lox
-/// print expression;
-/// ```
-static void printStatement() {
-  // Compile expression (push onto stack)
-  expression();
-
-  consume(TOKEN_SEMICOLON, "Expect \";\" after value.");
-
-  // Emit instruction to print
-  emitByte(OP_PRINT);
-}
-
 /// @brief Compiles a return statement, which has the following syntax:
 /// ```lox
 /// return value;
@@ -1186,7 +1171,6 @@ static void synchronize() {
     case TOKEN_FOR:
     case TOKEN_IF:
     case TOKEN_WHILE:
-    case TOKEN_PRINT:
     case TOKEN_RETURN:
       return;
 
@@ -1317,9 +1301,7 @@ static void ifStatement() {
 }
 
 static void statement() {
-  if (match(TOKEN_PRINT)) {
-    printStatement();
-  } else if (match(TOKEN_FOR)) {
+  if (match(TOKEN_FOR)) {
     forStatement();
   } else if (match(TOKEN_IF)) {
     ifStatement();

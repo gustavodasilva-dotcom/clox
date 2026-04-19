@@ -12,6 +12,20 @@
 
 VM vm;
 
+/// @brief Implements the native `print` function, which prints its arguments to
+/// the console.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @return `nil`
+static Value printNative(int argCount, Value *args) {
+  for (int i = 0; i < argCount; i++) {
+    printValue(args[i]);
+  }
+
+  printf("\n");
+  return NIL_VAL;
+}
+
 /// @brief Implements the native `clock` function.
 /// @param argCount The number of arguments passed to the function
 /// @param args A pointer to the first argument on the stack
@@ -393,6 +407,7 @@ void initVM() {
   vm.initString = NULL;
   vm.initString = copyString("init", 4);
 
+  defineNative("print", printNative);
   defineNative("clock", clockNative);
 }
 
@@ -655,12 +670,6 @@ static InterpretResult run() {
 
       // Pop, negate, and push
       push(NUMBER_VAL(-AS_NUMBER(pop())));
-      break;
-    }
-
-    case OP_PRINT: {
-      printValue(pop());
-      printf("\n");
       break;
     }
 
