@@ -134,7 +134,7 @@ static bool maxNative(int argCount, Value *args, Value *value) {
   MIN_MAX_NATIVE(argCount, args, value, >);
 }
 
-#define UNARY_MATH(args, value, func)                                          \
+#define UNARY_NATIVE(args, value, func)                                        \
   if (!IS_NUMBER(args[0])) {                                                   \
     runtimeError("Operand must be a number.");                                 \
     return false;                                                              \
@@ -150,7 +150,7 @@ static bool maxNative(int argCount, Value *args, Value *value) {
 /// @return `true` if the function executed successfully, `false` if it
 /// encountered an error
 static bool absNative(int argCount, Value *args, Value *value) {
-  UNARY_MATH(args, value, fabs);
+  UNARY_NATIVE(args, value, fabs);
 }
 
 /// @brief Implements the native `sqrt` function, which returns the square root
@@ -161,7 +161,7 @@ static bool absNative(int argCount, Value *args, Value *value) {
 /// @return `true` if the function executed successfully, `false` if it
 /// encountered an error
 static bool sqrtNative(int argCount, Value *args, Value *value) {
-  UNARY_MATH(args, value, sqrt);
+  UNARY_NATIVE(args, value, sqrt);
 }
 
 /// @brief Implements the native `ceiling` function, which returns the smallest
@@ -172,7 +172,7 @@ static bool sqrtNative(int argCount, Value *args, Value *value) {
 /// @return `true` if the function executed successfully, `false` if it
 /// encountered an error
 static bool ceilingNative(int argCount, Value *args, Value *value) {
-  UNARY_MATH(args, value, ceil);
+  UNARY_NATIVE(args, value, ceil);
 }
 
 /// @brief Implements the native `floor` function, which returns the largest
@@ -183,7 +183,7 @@ static bool ceilingNative(int argCount, Value *args, Value *value) {
 /// @return `true` if the function executed successfully, `false` if it
 /// encountered an error
 static bool floorNative(int argCount, Value *args, Value *value) {
-  UNARY_MATH(args, value, floor);
+  UNARY_NATIVE(args, value, floor);
 }
 
 /// @brief Implements the native `pow` function, which returns the result of
