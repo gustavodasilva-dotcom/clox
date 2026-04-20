@@ -90,9 +90,10 @@ ObjInstance *newInstance(ObjClass *klass) {
   return instance;
 }
 
-ObjNative *newNative(int arity, NativeFn function) {
+ObjNative *newNative(int arity, bool isVariadic, NativeFn function) {
   ObjNative *native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
   native->arity = arity;
+  native->isVariadic = isVariadic;
   native->function = function;
 
   return native;

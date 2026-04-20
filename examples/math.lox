@@ -1,0 +1,56 @@
+print("Absolute:");
+
+print(abs(-5));
+print(abs(5));
+print(abs(-10.1));
+print(abs(10.1));
+
+print("Minimum:");
+
+print(min(1));
+print(min(1, 2, 3));
+print(min(3, 2, 1));
+print(min(100, 1000, 1, 10000.1));
+print(min(-1, 0, 1, 2, 3));
+
+print("Maxinum:");
+
+print(max(1));
+print(max(1, 2, 3));
+print(max(3, 2, 1));
+print(max(100, 1000, 1, 10000.1));
+print(max(-1, 0, 1, 2, 3));
+
+print("Power:");
+
+print(pow(2, 8));
+print(pow(3.0, 4.0));
+print(pow(9.0, 0.5));
+print(pow(8.0, -1.0));
+print(pow(10, -2));
+
+print("Square root:");
+
+print(sqrt(0));
+print(sqrt(1));
+print(sqrt(9));
+print(sqrt(0.64));
+print(sqrt(-25));
+
+print("Ceiling:");
+
+print(ceiling(0.60));
+print(ceiling(0.40));
+print(ceiling(5));
+print(ceiling(5.1));
+print(ceiling(-5.1));
+print(ceiling(-5.9));
+
+print("Floor:");
+
+print(floor(0.60));
+print(floor(0.40));
+print(floor(5));
+print(floor(5.1));
+print(floor(-5.1));
+print(floor(-5.9));

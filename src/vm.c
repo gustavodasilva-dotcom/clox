@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,25 +13,8 @@
 
 VM vm;
 
-/// @brief Implements the native `print` function, which prints its argument to
-/// the console.
-/// @param argCount The number of arguments passed to the function
-/// @param args A pointer to the first argument on the stack
-/// @return `nil`
-static Value printNative(int argCount, Value *args) {
-  printValue(args[0]);
-  printf("\n");
-  return NIL_VAL;
-}
-
-/// @brief Implements the native `clock` function.
-/// @param argCount The number of arguments passed to the function
-/// @param args A pointer to the first argument on the stack
-/// @return The current CPU time in seconds
-static Value clockNative(int argCount, Value *args) {
-  return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
-}
-
+/// @brief Resets the VM's stack and call frame state, typically after a runtime
+/// error.
 static void resetStack() {
   // Set the stack top to the beginning of the stack (decays to a pointer to the
   // first element)
@@ -42,6 +26,10 @@ static void resetStack() {
   vm.openUpvalues = NULL;
 }
 
+/// @brief Prints a runtime error message and resets the VM's stack and call
+/// frame state.
+/// @param format The format string for the error message
+/// @param ... The arguments for the format string
 static void runtimeError(const char *format, ...) {
   // Format error message
   va_list args;
@@ -75,15 +63,158 @@ static void runtimeError(const char *format, ...) {
   resetStack();
 }
 
+/// @brief Implements the native `print` function, which prints its argument to
+/// the console.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool printNative(int argCount, Value *args, Value *value) {
+  printValue(args[0]);
+  printf("\n");
+
+  *value = NIL_VAL;
+  return true;
+}
+
+/// @brief Implements the native `clock` function.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool clockNative(int argCount, Value *args, Value *value) {
+  *value = NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+  return true;
+}
+
+#define MIN_MAX_NATIVE(argCount, args, value, op)                              \
+  if (argCount >= 1 && !IS_NUMBER(args[0])) {                                  \
+    runtimeError("Operands must be a number.");                                \
+    return false;                                                              \
+  }                                                                            \
+  double min = AS_NUMBER(args[0]);                                             \
+  if (argCount == 1) {                                                         \
+    *value = NUMBER_VAL(min);                                                  \
+    return true;                                                               \
+  }                                                                            \
+  for (int i = 1; i < argCount; i++) {                                         \
+    if (!IS_NUMBER(args[i])) {                                                 \
+      runtimeError("Operands must be a number.");                              \
+      return false;                                                            \
+    }                                                                          \
+    double number = AS_NUMBER(args[i]);                                        \
+    if (number op min) {                                                       \
+      min = number;                                                            \
+    }                                                                          \
+  }                                                                            \
+  *value = NUMBER_VAL(min);                                                    \
+  return true;
+
+/// @brief Implements the native `min` function, which returns the minimum of
+/// its arguments.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool minNative(int argCount, Value *args, Value *value) {
+  MIN_MAX_NATIVE(argCount, args, value, <);
+}
+
+/// @brief Implements the native `max` function, which returns the maximum of
+/// its arguments.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool maxNative(int argCount, Value *args, Value *value) {
+  MIN_MAX_NATIVE(argCount, args, value, >);
+}
+
+#define UNARY_MATH(args, value, func)                                          \
+  if (!IS_NUMBER(args[0])) {                                                   \
+    runtimeError("Operand must be a number.");                                 \
+    return false;                                                              \
+  }                                                                            \
+  *value = NUMBER_VAL(func(AS_NUMBER(args[0])));                               \
+  return true;
+
+/// @brief Implements the native `abs` function, which returns the absolute
+/// value of a number.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool absNative(int argCount, Value *args, Value *value) {
+  UNARY_MATH(args, value, fabs);
+}
+
+/// @brief Implements the native `sqrt` function, which returns the square root
+/// of a number.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool sqrtNative(int argCount, Value *args, Value *value) {
+  UNARY_MATH(args, value, sqrt);
+}
+
+/// @brief Implements the native `ceiling` function, which returns the smallest
+/// integer greater than or equal to a number.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool ceilingNative(int argCount, Value *args, Value *value) {
+  UNARY_MATH(args, value, ceil);
+}
+
+/// @brief Implements the native `floor` function, which returns the largest
+/// integer less than or equal to a number.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool floorNative(int argCount, Value *args, Value *value) {
+  UNARY_MATH(args, value, floor);
+}
+
+/// @brief Implements the native `pow` function, which returns the result of
+/// raising the first argument to the power of the second argument.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool powNative(int argCount, Value *args, Value *value) {
+  if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1])) {
+    runtimeError("Operands must be a number.");
+    return false;
+  }
+
+  *value = NUMBER_VAL(pow(AS_NUMBER(args[0]), AS_NUMBER(args[1])));
+  return true;
+}
+
 /// @brief Defines a native function in the global variables hash table.
 /// @param name The name of the native function
 /// @param arity The number of parameters the native function takes
+/// @param isVariadic Whether the native function is variadic (takes a variable
+/// number of arguments)
 /// @param function A pointer to the native function
-static void defineNative(const char *name, int arity, NativeFn function) {
+static void defineNative(const char *name, int arity, bool isVariadic,
+                         NativeFn function) {
   // Push the native function's name and the native function itself onto the
   // stack
   push(OBJ_VAL(copyString(name, (int)strlen(name))));
-  push(OBJ_VAL(newNative(arity, function)));
+  push(OBJ_VAL(newNative(arity, isVariadic, function)));
 
   // Define the native function in the global variables hash table
   tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
@@ -176,17 +307,25 @@ static bool callValue(Value callee, int argCount) {
       // Cast the callee to a native function
       ObjNative *native = AS_NATIVE(callee);
 
-      if (argCount != native->arity) {
-        runtimeError("Expected %d arguments but got %d.", native->arity,
-                     argCount);
+      if ((native->isVariadic && argCount < native->arity) ||
+          (!native->isVariadic && argCount != native->arity)) {
+        runtimeError("Expected %s%d argument%s but got %d.",
+                     native->isVariadic ? "at least " : "", native->arity,
+                     native->arity != 1 ? "s" : "", argCount);
         return false;
       }
 
       // Call the native function
-      Value result = native->function(argCount, vm.stackTop - argCount);
+      Value result;
+      bool success =
+          native->function(argCount, vm.stackTop - argCount, &result);
 
       // Pop arguments and the callee from the stack
       vm.stackTop -= argCount + 1;
+
+      if (!success) {
+        return false;
+      }
 
       // Push the result of the native function call onto the stack
       push(result);
@@ -411,8 +550,25 @@ void initVM() {
   vm.initString = NULL;
   vm.initString = copyString("init", 4);
 
-  defineNative("print", 1, printNative);
-  defineNative("clock", 0, clockNative);
+#define NATIVE_FIXED(name, arity, function)                                    \
+  defineNative(name, arity, false, function)
+#define NATIVE_VARIADIC(name, arity, function)                                 \
+  defineNative(name, arity, true, function)
+
+  NATIVE_FIXED("print", 1, printNative);
+  NATIVE_FIXED("clock", 0, clockNative);
+
+  // Math functions
+  NATIVE_FIXED("abs", 1, absNative);
+  NATIVE_VARIADIC("min", 1, minNative);
+  NATIVE_VARIADIC("max", 1, maxNative);
+  NATIVE_FIXED("pow", 2, powNative);
+  NATIVE_FIXED("sqrt", 1, sqrtNative);
+  NATIVE_FIXED("ceiling", 1, ceilingNative);
+  NATIVE_FIXED("floor", 1, floorNative);
+
+#undef NATIVE_FIXED
+#undef NATIVE_VARIADIC
 }
 
 void freeVM() {

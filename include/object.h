@@ -64,15 +64,20 @@ typedef struct {
 
 // A native function type, which is a pointer to a C function, that takes an
 // argument count and a pointer to the first argument on the stack.
-typedef Value (*NativeFn)(int argCount, Value *args);
+typedef bool (*NativeFn)(int argCount, Value *args, Value *result);
 
 // A native function object.
 typedef struct {
   // Obj header; align with Obj for easy casting
   Obj obj;
 
-  // Number of parameters
+  // Number of parameters, or, in variadic native functions, the minimum number
+  // of arguments required to call the function
   int arity;
+
+  // Whether the native function is variadic (takes a variable number of
+  // arguments)
+  bool isVariadic;
 
   // Pointer to the C function to call when the native function is called
   NativeFn function;
@@ -181,10 +186,12 @@ ObjInstance *newInstance(ObjClass *klass);
 
 /// @brief Allocates a new native function object on the heap.
 /// @param arity The number of parameters the native function takes
+/// @param isVariadic Whether the native function is variadic (takes a variable
+/// number of arguments)
 /// @param function The C function to call when the native function is
 /// called
 /// @return A pointer to the heap-allocated native function object
-ObjNative *newNative(int arity, NativeFn function);
+ObjNative *newNative(int arity, bool isVariadic, NativeFn function);
 
 /// @brief Allocates a new string object on the heap.
 /// @param chars The string
