@@ -1,0 +1,2 @@
+print(len("Hello"));
+print(len("Hello world!"));

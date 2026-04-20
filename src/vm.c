@@ -89,9 +89,15 @@ static bool clockNative(int argCount, Value *args, Value *value) {
   return true;
 }
 
+#define ASSERT_TYPE(type, value, message)                                      \
+  if (!type(value)) {                                                          \
+    runtimeError(message);                                                     \
+    return false;                                                              \
+  }
+
 #define MIN_MAX_NATIVE(argCount, args, value, op)                              \
   if (argCount >= 1 && !IS_NUMBER(args[0])) {                                  \
-    runtimeError("Operands must be a number.");                                \
+    runtimeError("Arguments must be numbers.");                                \
     return false;                                                              \
   }                                                                            \
   double min = AS_NUMBER(args[0]);                                             \
@@ -100,10 +106,7 @@ static bool clockNative(int argCount, Value *args, Value *value) {
     return true;                                                               \
   }                                                                            \
   for (int i = 1; i < argCount; i++) {                                         \
-    if (!IS_NUMBER(args[i])) {                                                 \
-      runtimeError("Operands must be a number.");                              \
-      return false;                                                            \
-    }                                                                          \
+    ASSERT_TYPE(IS_NUMBER, args[i], "Arguments must be numbers.")              \
     double number = AS_NUMBER(args[i]);                                        \
     if (number op min) {                                                       \
       min = number;                                                            \
@@ -135,10 +138,7 @@ static bool maxNative(int argCount, Value *args, Value *value) {
 }
 
 #define UNARY_NATIVE(args, value, func)                                        \
-  if (!IS_NUMBER(args[0])) {                                                   \
-    runtimeError("Operand must be a number.");                                 \
-    return false;                                                              \
-  }                                                                            \
+  ASSERT_TYPE(IS_NUMBER, args[0], "Argument must be a number.")                \
   *value = NUMBER_VAL(func(AS_NUMBER(args[0])));                               \
   return true;
 
@@ -200,6 +200,19 @@ static bool powNative(int argCount, Value *args, Value *value) {
   }
 
   *value = NUMBER_VAL(pow(AS_NUMBER(args[0]), AS_NUMBER(args[1])));
+  return true;
+}
+
+/// @brief Implements the native `len` function, which returns the length of a
+/// string.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool lenNative(int argCount, Value *args, Value *value) {
+  ASSERT_TYPE(IS_STRING, args[0], "Argument must be a string.");
+  *value = NUMBER_VAL(AS_STRING(args[0])->length);
   return true;
 }
 
@@ -559,13 +572,16 @@ void initVM() {
   NATIVE_FIXED("clock", 0, clockNative);
 
   // Math functions
-  NATIVE_FIXED("abs", 1, absNative);
   NATIVE_VARIADIC("min", 1, minNative);
   NATIVE_VARIADIC("max", 1, maxNative);
-  NATIVE_FIXED("pow", 2, powNative);
+  NATIVE_FIXED("abs", 1, absNative);
   NATIVE_FIXED("sqrt", 1, sqrtNative);
   NATIVE_FIXED("ceiling", 1, ceilingNative);
   NATIVE_FIXED("floor", 1, floorNative);
+  NATIVE_FIXED("pow", 2, powNative);
+
+  // String functions
+  NATIVE_FIXED("len", 1, lenNative);
 
 #undef NATIVE_FIXED
 #undef NATIVE_VARIADIC
