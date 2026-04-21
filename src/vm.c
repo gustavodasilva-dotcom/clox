@@ -216,6 +216,49 @@ static bool lenNative(int argCount, Value *args, Value *value) {
   return true;
 }
 
+/// @brief Implements the native `substring` function, which returns a substring
+/// of a string given a starting index and length.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool substringNative(int argCount, Value *args, Value *value) {
+  ASSERT_TYPE(IS_STRING, args[0], "Argument 1 must be a string.");
+  ASSERT_TYPE(IS_NUMBER, args[1], "Argument 2 must be a number.");
+  ASSERT_TYPE(IS_NUMBER, args[2], "Argument 3 must be a number.");
+
+  ObjString *string = AS_STRING(args[0]);
+
+  int startIndex = (int)AS_NUMBER(args[1]);
+  int length = (int)AS_NUMBER(args[2]);
+
+  if (startIndex < 0 || length < 0) {
+    runtimeError("Start index and length must be non-negative.");
+    return false;
+  }
+
+  if (startIndex > string->length) {
+    runtimeError("Start index out of bounds.");
+    return false;
+  }
+
+  if (startIndex + length > string->length) {
+    runtimeError("Substring length out of bounds.");
+    return false;
+  }
+
+  char *result = ALLOCATE(char, length + 1);
+  memcpy(result, string->chars + startIndex, length);
+  result[length] = '\0';
+
+  *value = OBJ_VAL(copyString(result, length));
+
+  FREE_ARRAY(char, result, length + 1);
+
+  return true;
+}
+
 /// @brief Defines a native function in the global variables hash table.
 /// @param name The name of the native function
 /// @param arity The number of parameters the native function takes
@@ -582,6 +625,7 @@ void initVM() {
 
   // String functions
   NATIVE_FIXED("len", 1, lenNative);
+  NATIVE_FIXED("substring", 3, substringNative);
 
 #undef NATIVE_FIXED
 #undef NATIVE_VARIADIC

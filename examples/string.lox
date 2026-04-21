@@ -1,2 +1,4 @@
 print(len("Hello"));
 print(len("Hello world!"));
+
+print(substring("Hello world!", 6, 6));
