@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -248,13 +249,55 @@ static bool substringNative(int argCount, Value *args, Value *value) {
     return false;
   }
 
-  char *chars = ALLOCATE(char, length);
+  char *chars = ALLOCATE(char, length + 1);
   memcpy(chars, string->chars + startIndex, length);
+  chars[length] = '\0';
 
-  *value = OBJ_VAL(copyString(chars, length));
+  *value = OBJ_VAL(takeString(chars, length));
+  return true;
+}
 
-  FREE_ARRAY(char, chars, length);
+/// @brief Implements the native `concat` function, which returns the
+/// concatenation of multiple strings.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool concatNative(int argCount, Value *args, Value *value) {
+  if (argCount == 1) {
+    ASSERT_TYPE(IS_STRING, args[0], "Argument 1 must be a string.");
+    *value = args[0];
+    return true;
+  }
 
+  int length = 0;
+  ObjString *strings[argCount];
+
+  for (int i = 0; i < argCount; i++) {
+    ASSERT_TYPE(IS_STRING, args[i], "Argument %d must be a string.", i + 1);
+
+    strings[i] = AS_STRING(args[i]);
+
+    if (length > INT_MAX - strings[i]->length) {
+      runtimeError("Concatenated string is too long.");
+      return false;
+    }
+
+    length += strings[i]->length;
+  }
+
+  char *chars = ALLOCATE(char, length + 1);
+  char *cursor = chars;
+
+  for (int i = 0; i < argCount; i++) {
+    memcpy(cursor, strings[i]->chars, strings[i]->length);
+    cursor += strings[i]->length;
+  }
+
+  chars[length] = '\0';
+
+  *value = OBJ_VAL(takeString(chars, length));
   return true;
 }
 
@@ -625,6 +668,7 @@ void initVM() {
   // String functions
   NATIVE_FIXED("len", 1, lenNative);
   NATIVE_FIXED("substring", 3, substringNative);
+  NATIVE_VARIADIC("concat", 1, concatNative);
 
 #undef NATIVE_FIXED
 #undef NATIVE_VARIADIC

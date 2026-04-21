@@ -2,3 +2,8 @@ print(len("Hello"));
 print(len("Hello world!"));
 
 print(substring("Hello world!", 6, 6));
+
+print(concat(""));
+print(concat("Hello", "World"));
+print(concat("Hello", " ", "World", "!"));
+print(concat("", "", "", "", ""));
