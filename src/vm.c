@@ -89,9 +89,9 @@ static bool clockNative(int argCount, Value *args, Value *value) {
   return true;
 }
 
-#define ASSERT_TYPE(type, value, message)                                      \
+#define ASSERT_TYPE(type, value, message, ...)                                 \
   if (!type(value)) {                                                          \
-    runtimeError(message);                                                     \
+    runtimeError(message, ##__VA_ARGS__);                                      \
     return false;                                                              \
   }
 
@@ -248,13 +248,12 @@ static bool substringNative(int argCount, Value *args, Value *value) {
     return false;
   }
 
-  char *result = ALLOCATE(char, length + 1);
-  memcpy(result, string->chars + startIndex, length);
-  result[length] = '\0';
+  char *chars = ALLOCATE(char, length);
+  memcpy(chars, string->chars + startIndex, length);
 
-  *value = OBJ_VAL(copyString(result, length));
+  *value = OBJ_VAL(copyString(chars, length));
 
-  FREE_ARRAY(char, result, length + 1);
+  FREE_ARRAY(char, chars, length);
 
   return true;
 }
