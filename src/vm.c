@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -89,9 +90,15 @@ static bool clockNative(int argCount, Value *args, Value *value) {
   return true;
 }
 
+#define ASSERT_TYPE(type, value, message, ...)                                 \
+  if (!type(value)) {                                                          \
+    runtimeError(message, ##__VA_ARGS__);                                      \
+    return false;                                                              \
+  }
+
 #define MIN_MAX_NATIVE(argCount, args, value, op)                              \
   if (argCount >= 1 && !IS_NUMBER(args[0])) {                                  \
-    runtimeError("Operands must be a number.");                                \
+    runtimeError("Arguments must be numbers.");                                \
     return false;                                                              \
   }                                                                            \
   double min = AS_NUMBER(args[0]);                                             \
@@ -100,10 +107,7 @@ static bool clockNative(int argCount, Value *args, Value *value) {
     return true;                                                               \
   }                                                                            \
   for (int i = 1; i < argCount; i++) {                                         \
-    if (!IS_NUMBER(args[i])) {                                                 \
-      runtimeError("Operands must be a number.");                              \
-      return false;                                                            \
-    }                                                                          \
+    ASSERT_TYPE(IS_NUMBER, args[i], "Arguments must be numbers.")              \
     double number = AS_NUMBER(args[i]);                                        \
     if (number op min) {                                                       \
       min = number;                                                            \
@@ -135,10 +139,7 @@ static bool maxNative(int argCount, Value *args, Value *value) {
 }
 
 #define UNARY_NATIVE(args, value, func)                                        \
-  if (!IS_NUMBER(args[0])) {                                                   \
-    runtimeError("Operand must be a number.");                                 \
-    return false;                                                              \
-  }                                                                            \
+  ASSERT_TYPE(IS_NUMBER, args[0], "Argument must be a number.")                \
   *value = NUMBER_VAL(func(AS_NUMBER(args[0])));                               \
   return true;
 
@@ -200,6 +201,103 @@ static bool powNative(int argCount, Value *args, Value *value) {
   }
 
   *value = NUMBER_VAL(pow(AS_NUMBER(args[0]), AS_NUMBER(args[1])));
+  return true;
+}
+
+/// @brief Implements the native `len` function, which returns the length of a
+/// string.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool lenNative(int argCount, Value *args, Value *value) {
+  ASSERT_TYPE(IS_STRING, args[0], "Argument must be a string.");
+  *value = NUMBER_VAL(AS_STRING(args[0])->length);
+  return true;
+}
+
+/// @brief Implements the native `substring` function, which returns a substring
+/// of a string given a starting index and length.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool substringNative(int argCount, Value *args, Value *value) {
+  ASSERT_TYPE(IS_STRING, args[0], "Argument 1 must be a string.");
+  ASSERT_TYPE(IS_NUMBER, args[1], "Argument 2 must be a number.");
+  ASSERT_TYPE(IS_NUMBER, args[2], "Argument 3 must be a number.");
+
+  ObjString *string = AS_STRING(args[0]);
+
+  int startIndex = (int)AS_NUMBER(args[1]);
+  int length = (int)AS_NUMBER(args[2]);
+
+  if (startIndex < 0 || length < 0) {
+    runtimeError("Start index and length must be non-negative.");
+    return false;
+  }
+
+  if (startIndex > string->length) {
+    runtimeError("Start index out of bounds.");
+    return false;
+  }
+
+  if (startIndex + length > string->length) {
+    runtimeError("Substring length out of bounds.");
+    return false;
+  }
+
+  char *chars = ALLOCATE(char, length + 1);
+  memcpy(chars, string->chars + startIndex, length);
+  chars[length] = '\0';
+
+  *value = OBJ_VAL(takeString(chars, length));
+  return true;
+}
+
+/// @brief Implements the native `concat` function, which returns the
+/// concatenation of multiple strings.
+/// @param argCount The number of arguments passed to the function
+/// @param args A pointer to the first argument on the stack
+/// @param value A pointer to a Value where the result of the function call
+/// @return `true` if the function executed successfully, `false` if it
+/// encountered an error
+static bool concatNative(int argCount, Value *args, Value *value) {
+  if (argCount == 1) {
+    ASSERT_TYPE(IS_STRING, args[0], "Argument 1 must be a string.");
+    *value = args[0];
+    return true;
+  }
+
+  int length = 0;
+  ObjString *strings[argCount];
+
+  for (int i = 0; i < argCount; i++) {
+    ASSERT_TYPE(IS_STRING, args[i], "Argument %d must be a string.", i + 1);
+
+    strings[i] = AS_STRING(args[i]);
+
+    if (length > INT_MAX - strings[i]->length) {
+      runtimeError("Concatenated string is too long.");
+      return false;
+    }
+
+    length += strings[i]->length;
+  }
+
+  char *chars = ALLOCATE(char, length + 1);
+  char *cursor = chars;
+
+  for (int i = 0; i < argCount; i++) {
+    memcpy(cursor, strings[i]->chars, strings[i]->length);
+    cursor += strings[i]->length;
+  }
+
+  chars[length] = '\0';
+
+  *value = OBJ_VAL(takeString(chars, length));
   return true;
 }
 
@@ -559,13 +657,18 @@ void initVM() {
   NATIVE_FIXED("clock", 0, clockNative);
 
   // Math functions
-  NATIVE_FIXED("abs", 1, absNative);
   NATIVE_VARIADIC("min", 1, minNative);
   NATIVE_VARIADIC("max", 1, maxNative);
-  NATIVE_FIXED("pow", 2, powNative);
+  NATIVE_FIXED("abs", 1, absNative);
   NATIVE_FIXED("sqrt", 1, sqrtNative);
   NATIVE_FIXED("ceiling", 1, ceilingNative);
   NATIVE_FIXED("floor", 1, floorNative);
+  NATIVE_FIXED("pow", 2, powNative);
+
+  // String functions
+  NATIVE_FIXED("len", 1, lenNative);
+  NATIVE_FIXED("substring", 3, substringNative);
+  NATIVE_VARIADIC("concat", 1, concatNative);
 
 #undef NATIVE_FIXED
 #undef NATIVE_VARIADIC
