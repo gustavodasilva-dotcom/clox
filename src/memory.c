@@ -114,6 +114,14 @@ static void blackenObject(Obj *object) {
 #endif
 
   switch (object->type) {
+  case OBJ_ARRAY: {
+    ObjArray *array = (ObjArray *)object;
+
+    // Mark the array's elements as GC roots
+    markArray(&array->elements);
+    break;
+  }
+
   case OBJ_BOUND_METHOD: {
     ObjBoundMethod *bound = (ObjBoundMethod *)object;
 
@@ -187,6 +195,17 @@ static void freeObject(Obj *object) {
 #endif
 
   switch (object->type) {
+  case OBJ_ARRAY: {
+    ObjArray *array = (ObjArray *)object;
+
+    // Free the array's elements array
+    freeValueArray(&array->elements);
+
+    // Free the array object itself
+    FREE(ObjArray, object);
+    break;
+  }
+
   case OBJ_BOUND_METHOD:
     FREE(ObjBoundMethod, object);
     break;

@@ -33,6 +33,15 @@ static Obj *allocateObject(size_t size, ObjType type) {
   return object;
 }
 
+ObjArray *newArray() {
+  ObjArray *array = ALLOCATE_OBJ(ObjArray, OBJ_ARRAY);
+
+  // Initialize the array's elements array
+  initValueArray(&array->elements);
+
+  return array;
+}
+
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method) {
   ObjBoundMethod *bound = ALLOCATE_OBJ(ObjBoundMethod, OBJ_BOUND_METHOD);
 
@@ -192,11 +201,28 @@ static void printFunction(ObjFunction *function) {
 
 void printObject(Value value) {
   switch (OBJ_TYPE(value)) {
-  case OBJ_CLASS:
-    printf("%s", AS_CLASS(value)->name->chars);
+  case OBJ_ARRAY: {
+    ValueArray *array = &AS_ARRAY(value)->elements;
+
+    printf("[");
+
+    for (int i = 0; i < array->count; i++) {
+      printValue(array->values[i]);
+
+      // Print comma after every element except the last one
+      if (i < array->count - 1) {
+        printf(", ");
+      }
+    }
+
+    printf("]");
     break;
+  }
   case OBJ_BOUND_METHOD:
     printFunction(AS_BOUND_METHOD(value)->method->function);
+    break;
+  case OBJ_CLASS:
+    printf("%s", AS_CLASS(value)->name->chars);
     break;
   case OBJ_CLOSURE:
     printFunction(AS_CLOSURE(value)->function);
@@ -211,7 +237,7 @@ void printObject(Value value) {
     printf("<native fn>");
     break;
   case OBJ_STRING:
-    printf("%s", AS_CSTRING(value));
+    printf("\"%s\"", AS_CSTRING(value));
     break;
   case OBJ_UPVALUE:
     printf("upvalue");

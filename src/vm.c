@@ -1097,8 +1097,27 @@ static InterpretResult run() {
       defineMethod(READ_STRING());
       break;
 
-    case OP_ARRAY:
-      break;
+    case OP_ARRAY: {
+      uint8_t elementsCount = READ_BYTE();
+
+      // Create array object
+      ObjArray *array = newArray();
+
+      // Temporarily root the array object during initialization
+      push(OBJ_VAL(array));
+
+      // Read elements from the stack and write them to the array
+      for (int i = elementsCount; i > 0; i--) {
+        writeValueArray(&array->elements, peek(i));
+      }
+
+      // Replace the first element on the stack with the array object itself
+      vm.stackTop[-elementsCount - 1] = OBJ_VAL(array);
+
+      // Remove remaining elements (and the initially pushed array object) from
+      // the stack
+      vm.stackTop -= elementsCount;
+    }
     }
   }
 
