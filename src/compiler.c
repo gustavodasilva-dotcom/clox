@@ -649,7 +649,25 @@ static void literal(bool canAssign) {
 /// `expression()` (which emits bytecode) and consume the closing parenthesis.
 static void grouping(bool canAssign) {
   expression();
-  consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+  consume(TOKEN_RIGHT_PAREN, "Expect \")\" after expression.");
+}
+
+/// @brief Compiles an array literal expression.
+static void array(bool canAssign) {
+  uint8_t elementsCount = 0;
+
+  if (!check(TOKEN_RIGHT_BRACKET)) {
+    do {
+      // Compile the array element expression and push its value onto the stack
+      expression();
+
+      elementsCount++;
+    } while (match(TOKEN_COMMA));
+  }
+
+  consume(TOKEN_RIGHT_BRACKET, "Expect \"]\" after array elements.");
+
+  emitBytes(OP_ARRAY, elementsCount);
 }
 
 /// @brief Compiles a number literal expression.
@@ -814,6 +832,8 @@ ParseRule rules[] = {
     [TOKEN_RIGHT_PAREN] = {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACE] = {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE] = {NULL, NULL, PREC_NONE},
+    [TOKEN_LEFT_BRACKET] = {array, NULL, PREC_NONE},
+    [TOKEN_RIGHT_BRACKET] = {NULL, NULL, PREC_NONE},
     [TOKEN_COMMA] = {NULL, NULL, PREC_NONE},
     [TOKEN_DOT] = {NULL, dot, PREC_CALL},
     [TOKEN_MINUS] = {unary, binary, PREC_TERM},

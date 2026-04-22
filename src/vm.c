@@ -1096,6 +1096,9 @@ static InterpretResult run() {
     case OP_METHOD:
       defineMethod(READ_STRING());
       break;
+
+    case OP_ARRAY:
+      break;
     }
   }
 
