@@ -1117,6 +1117,68 @@ static InterpretResult run() {
       // Remove remaining elements (and the initially pushed array object) from
       // the stack
       vm.stackTop -= elementsCount;
+      break;
+    }
+
+    case OP_INDEX: {
+      Value objValue = peek(1);
+
+      if (!IS_ARRAY(objValue) && !IS_STRING(objValue)) {
+        runtimeError("Only arrays and strings can be indexed.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      Value indexValue = peek(0);
+
+      if (!IS_NUMBER(indexValue)) {
+        runtimeError("Index must evaluate to a number.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      double number = AS_NUMBER(indexValue);
+
+      // Make sure the number has no fractional part
+      if (number != (int)number) {
+        runtimeError("Index must be an integer.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      int index = (int)number;
+
+      Value result;
+
+      if (IS_ARRAY(objValue)) {
+        ValueArray *elements = &AS_ARRAY(objValue)->elements;
+
+        if (index < 0 || index >= elements->count) {
+          runtimeError("Index out of bounds.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+
+        result = elements->values[index];
+      } else {
+        ObjString *string = AS_STRING(objValue);
+
+        if (index < 0 || index >= string->length) {
+          runtimeError("Index out of bounds.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+
+        // Stack-allocate a temporary array to hold the single character
+        char chars[1];
+        chars[0] = string->chars[index];
+
+        // Create a new heap-allocated string object
+        result = OBJ_VAL(copyString(chars, 1));
+      }
+
+      // Pop the index and the array from the stack
+      pop();
+      pop();
+
+      // Push the indexed element onto the stack
+      push(result);
+      break;
     }
     }
   }
