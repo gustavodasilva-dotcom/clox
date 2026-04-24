@@ -5,6 +5,10 @@
 
 #include "common.h"
 
+// The maximum number of elements an array can hold (around 16 million elements
+// or 128 MB).
+#define MAX_ARRAY_SIZE (1 << 24)
+
 // Forward declaration of Obj (to avoid circular dependency).
 typedef struct Obj Obj;
 

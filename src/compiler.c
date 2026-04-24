@@ -676,7 +676,16 @@ static void index(bool canAssign) {
 
   consume(TOKEN_RIGHT_BRACKET, "Expect \"]\" after index expression.");
 
-  emitByte(OP_INDEX);
+  if (canAssign && match(TOKEN_EQUAL)) {
+    // Compile the assigned expression and push its value onto the stack
+    expression();
+
+    // Emit the setter instruction
+    emitByte(OP_SET_INDEX);
+  } else {
+    // Emit the getter instruction
+    emitByte(OP_GET_INDEX);
+  }
 }
 
 /// @brief Compiles a number literal expression.

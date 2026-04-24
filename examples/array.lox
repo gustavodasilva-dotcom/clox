@@ -4,5 +4,20 @@ var numbers = [1, 2, 3, 4];
 print(numbers);
 print(numbers[3]);
 
-var greet = "Hello!";
-print(greet[5]);
+var text = "Hello!";
+print(text[5]);
+
+var mix = [1, "Hello", false];
+
+// Before
+print(mix);
+print(len(mix));
+
+mix[0] = "Hello";
+mix[1] = "world";
+mix[2] = "!";
+mix[4] = "!";
+
+// After
+print(mix);
+print(len(mix));

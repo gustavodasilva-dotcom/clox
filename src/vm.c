@@ -212,8 +212,13 @@ static bool powNative(int argCount, Value *args, Value *value) {
 /// @return `true` if the function executed successfully, `false` if it
 /// encountered an error
 static bool lenNative(int argCount, Value *args, Value *value) {
-  ASSERT_TYPE(IS_STRING, args[0], "Argument must be a string.");
-  *value = NUMBER_VAL(AS_STRING(args[0])->length);
+  if (!IS_STRING(args[0]) && !IS_ARRAY(args[0])) {
+    runtimeError("Argument must be a string or an array.");
+    return false;
+  }
+
+  *value = NUMBER_VAL(IS_STRING(args[0]) ? AS_STRING(args[0])->length
+                                         : AS_ARRAY(args[0])->elements.count);
   return true;
 }
 
@@ -1120,7 +1125,7 @@ static InterpretResult run() {
       break;
     }
 
-    case OP_INDEX: {
+    case OP_GET_INDEX: {
       Value objValue = peek(1);
 
       if (!IS_ARRAY(objValue) && !IS_STRING(objValue)) {
@@ -1138,12 +1143,17 @@ static InterpretResult run() {
       double number = AS_NUMBER(indexValue);
 
       // Make sure the number has no fractional part
-      if (number != (int)number) {
+      if (!isfinite(number) || floor(number) != number) {
         runtimeError("Index must be an integer.");
         return INTERPRET_RUNTIME_ERROR;
       }
 
       int index = (int)number;
+
+      if (index >= MAX_ARRAY_SIZE) {
+        runtimeError("Array index too large.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
 
       Value result;
 
@@ -1178,6 +1188,95 @@ static InterpretResult run() {
 
       // Push the indexed element onto the stack
       push(result);
+      break;
+    }
+
+    case OP_SET_INDEX: {
+      // Cache the stack top (to avoid repeated field lookups)
+      Value *stackTop = vm.stackTop;
+
+      Value objValue = stackTop[-3];
+
+      if (!IS_ARRAY(objValue)) {
+        runtimeError("Can only assign to indices of arrays.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      Value indexValue = stackTop[-2];
+
+      if (!IS_NUMBER(indexValue)) {
+        runtimeError("Index must evaluate to a number.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      double number = AS_NUMBER(indexValue);
+
+      // Make sure the number has no fractional part
+      if (!isfinite(number) || floor(number) != number) {
+        runtimeError("Index must be an integer.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      // Negative indices and indices that are too large to fit in an int are
+      // out of bounds
+      if (number < 0) {
+        runtimeError("Index out of bounds.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      int index = (int)number;
+
+      if (index >= MAX_ARRAY_SIZE) {
+        runtimeError("Array index too large.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      Value value = stackTop[-1];
+
+      ValueArray *elements = &AS_ARRAY(objValue)->elements;
+
+      if (index < elements->count) {
+        // Set the value at the specified (inbound) index
+        elements->values[index] = value;
+      } else {
+        int oldCount = elements->count;
+        int newCount = index + 1;
+
+        // If the index is out of bounds, grow the array to fit the new index
+        if (elements->capacity < newCount) {
+          int oldCapacity = elements->capacity;
+
+          // Calculate new capacity by repeatedly growing the old capacity until
+          // it is large enough to fit the new count
+          int capacity = elements->capacity;
+          while (capacity < newCount) {
+            int prev = capacity;
+            capacity = GROW_CAPACITY(capacity);
+            if (capacity <= prev) {
+              runtimeError("Array too large.");
+              return INTERPRET_RUNTIME_ERROR;
+            }
+          }
+
+          elements->capacity = capacity;
+          elements->values = GROW_ARRAY(Value, elements->values, oldCapacity,
+                                        elements->capacity);
+        }
+
+        // Initialize new elements between the old count and the new count to
+        // `nil`
+        for (int i = oldCount; i < newCount; i++) {
+          elements->values[i] = NIL_VAL;
+        }
+
+        elements->count = newCount;
+        elements->values[index] = value;
+      }
+
+      // Pop the value, index, and array from the stack
+      vm.stackTop -= 3;
+
+      push(value);
       break;
     }
     }
