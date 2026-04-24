@@ -1216,9 +1216,7 @@ static InterpretResult run() {
         runtimeError("Index must be an integer.");
         return INTERPRET_RUNTIME_ERROR;
       }
-
-      // Negative indices and indices that are too large to fit in an int are
-      // out of bounds
+      
       if (number < 0) {
         runtimeError("Index out of bounds.");
         return INTERPRET_RUNTIME_ERROR;
